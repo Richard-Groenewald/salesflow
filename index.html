@@ -1023,7 +1023,7 @@ async function sbUpdate(table, id, data) {
 }
 
 const DB_VERSION='5.0-xone';
-const APP_REVISION = 'r85';  // Increment this with each build
+const APP_REVISION = 'r86';  // Increment this with each build
 let DB={
   version:DB_VERSION,
   settings:{fyStart:7,escMonth:7,escRate:5,escDesc:'Revenue escalates every July by 5%'},
@@ -1157,6 +1157,25 @@ function resolvePermissions(user) {
   overrides.forEach(o=>{ if(o.grant) rolePerms.add(o.permission); else rolePerms.delete(o.permission); });
   return [...rolePerms];
 }
+function resolvePermissions(user) {
+  if(!user) return [];
+  const cred = DB.userCredentials.find(c=>+c.personId===+user.id);
+  const roleIds = cred ? (cred.roleIds||[]) : (user.roleIds||[]);
+  let perms = [];
+  roleIds.forEach(rid => { perms = perms.concat(DB.rolePermissions[rid]||[]); });
+  // Apply overrides
+  DB.userPermissionOverrides.filter(o=>+o.personId===+user.id).forEach(o=>{
+    if(o.type==='grant' && !perms.includes(o.permission)) perms.push(o.permission);
+    if(o.type==='deny') perms = perms.filter(p=>p!==o.permission);
+  });
+  return [...new Set(perms)];
+}
+
+function refreshCurrentUserPerms() {
+  if(!currentUser) return;
+  currentUser.resolvedPermissions = resolvePermissions(currentUser);
+}
+
 function can(permission) {
   if(!currentUser) return false;
   return (currentUser.resolvedPermissions||[]).includes(permission);
