@@ -1023,7 +1023,7 @@ async function sbUpdate(table, id, data) {
 }
 
 const DB_VERSION='5.0-xone';
-const APP_REVISION = 'r83';  // Increment this with each build
+const APP_REVISION = 'r85';  // Increment this with each build
 let DB={
   version:DB_VERSION,
   settings:{fyStart:7,escMonth:7,escRate:5,escDesc:'Revenue escalates every July by 5%'},
@@ -2719,7 +2719,7 @@ function hideLoadingOverlay() {
 }
 function initAuth() {
   // First run — no users exist yet, create initial admin
-  if (DB.people.length === 0) {
+  if (DB.userCredentials.length === 0) {
     showFirstRun();
     return;
   }
@@ -2751,9 +2751,7 @@ function showFirstRun() {
   document.body.classList.remove('sidebar-hidden');
   const fr = document.getElementById('first-run-screen');
   fr.style.display = 'flex';
-  const li = document.getElementById('firstrun-logo');
-  const si = document.getElementById('logo-img');
-  if(li && si) li.src = si.src;
+  // logo is inline SVG, no copy needed
   document.getElementById('fr-name').value = '';
   document.getElementById('fr-email').value = '';
   document.getElementById('fr-password').value = '';
@@ -2779,7 +2777,7 @@ function createFirstAdmin() {
     hidden: false, notes: ''
   };
   DB.people.push(newPerson);
-  sbSavePerson(newPerson);
+  sbSavePerson(newPerson); // fire and forget
 
   const newCred = {
     id: DB.nextIds.credential++,
@@ -2788,8 +2786,9 @@ function createFirstAdmin() {
     createdDate: new Date().toISOString().slice(0,10)
   };
   DB.userCredentials.push(newCred);
-  sbSaveCredential(newCred);
+  sbSaveCredential(newCred); // fire and forget
 
+  // Show app immediately - saves happen in background
   currentUser = {
     id: newPerson.id, personId: newPerson.id,
     name: personName(newPerson), email,
@@ -2806,10 +2805,7 @@ function showLogin() {
   document.querySelector('.sidebar').style.display = 'none';
   document.querySelector('.main').style.display = 'none';
   setTimeout(() => document.getElementById('login-email').focus(), 100);
-  // Embed logo on login screen too
-  const li = document.getElementById('login-logo');
-  const si = document.getElementById('logo-img');
-  if (li && si) li.src = si.src;
+  // logo is inline SVG, no copy needed
 }
 function showApp() {
   document.getElementById('login-screen').style.display = 'none';
