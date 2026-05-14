@@ -1023,7 +1023,7 @@ async function sbUpdate(table, id, data) {
 }
 
 const DB_VERSION='5.0-xone';
-const APP_REVISION = 'r86';  // Increment this with each build
+const APP_REVISION = 'r88';  // Increment this with each build
 let DB={
   version:DB_VERSION,
   settings:{fyStart:7,escMonth:7,escRate:5,escDesc:'Revenue escalates every July by 5%'},
@@ -1145,6 +1145,50 @@ const DEAL_PERMISSIONS=[
   {key:'view_financials',label:'View financials'}
 ];
 
+function getXonePerson(id){return DB.people.find(p=>+p.id===+id&&p.isXone)||{};}
+
+function closeModal(id){const el=document.getElementById(id);if(el)el.style.display='none';}
+
+function goHome(){showPage('dashboard');}
+
+function openEditUser(personId){
+  const p=DB.people.find(x=>+x.id===+personId);if(!p)return;
+  const cred=DB.userCredentials.find(c=>+c.personId===+personId)||{};
+  document.getElementById('edit-user-id').value=personId;
+  document.getElementById('nu-name').value=personName(p);
+  document.getElementById('nu-email').value=p.email||'';
+  document.getElementById('nu-password').value='';
+  if(document.getElementById('nu-is-xone'))document.getElementById('nu-is-xone').checked=p.isXone||false;
+  document.getElementById('nu-role').value=(cred.roleIds||[3])[0]||3;
+  document.getElementById('modal-new-user').style.display='flex';
+}
+
+function saveSettings(){
+  const s=DB.settings;
+  ['companyName','tagline','primaryColor','defaultMargin','defaultDuration'].forEach(k=>{
+    const el=document.getElementById('setting-'+k);
+    if(el)s[k]=el.value;
+  });
+  sbFetch('settings','POST',{key:'app_settings',value:JSON.stringify(s)},'');
+  alert('Settings saved');
+}
+
+function setOppScope(scope){
+  DB.settings.oppScope=scope;
+  document.querySelectorAll('.scope-btn').forEach(b=>b.classList.remove('active'));
+  const btn=document.querySelector('[data-scope="'+scope+'"]');
+  if(btn)btn.classList.add('active');
+  if(typeof renderOppsTable==='function')renderOppsTable();
+}
+
+function toggleMS(){
+  const el=document.getElementById('main-search-input');
+  if(el)el.focus();
+}
+
+function showNewOppModal(){openModal('modal-new-opp');}
+function openModal(id){const el=document.getElementById(id);if(el)el.style.display='flex';}
+
 function resolvePermissions(user) {
   if(!user) return [];
   // Collect role permissions
@@ -1157,6 +1201,50 @@ function resolvePermissions(user) {
   overrides.forEach(o=>{ if(o.grant) rolePerms.add(o.permission); else rolePerms.delete(o.permission); });
   return [...rolePerms];
 }
+function getXonePerson(id){return DB.people.find(p=>+p.id===+id&&p.isXone)||{};}
+
+function closeModal(id){const el=document.getElementById(id);if(el)el.style.display='none';}
+
+function goHome(){showPage('dashboard');}
+
+function openEditUser(personId){
+  const p=DB.people.find(x=>+x.id===+personId);if(!p)return;
+  const cred=DB.userCredentials.find(c=>+c.personId===+personId)||{};
+  document.getElementById('edit-user-id').value=personId;
+  document.getElementById('nu-name').value=personName(p);
+  document.getElementById('nu-email').value=p.email||'';
+  document.getElementById('nu-password').value='';
+  if(document.getElementById('nu-is-xone'))document.getElementById('nu-is-xone').checked=p.isXone||false;
+  document.getElementById('nu-role').value=(cred.roleIds||[3])[0]||3;
+  document.getElementById('modal-new-user').style.display='flex';
+}
+
+function saveSettings(){
+  const s=DB.settings;
+  ['companyName','tagline','primaryColor','defaultMargin','defaultDuration'].forEach(k=>{
+    const el=document.getElementById('setting-'+k);
+    if(el)s[k]=el.value;
+  });
+  sbFetch('settings','POST',{key:'app_settings',value:JSON.stringify(s)},'');
+  alert('Settings saved');
+}
+
+function setOppScope(scope){
+  DB.settings.oppScope=scope;
+  document.querySelectorAll('.scope-btn').forEach(b=>b.classList.remove('active'));
+  const btn=document.querySelector('[data-scope="'+scope+'"]');
+  if(btn)btn.classList.add('active');
+  if(typeof renderOppsTable==='function')renderOppsTable();
+}
+
+function toggleMS(){
+  const el=document.getElementById('main-search-input');
+  if(el)el.focus();
+}
+
+function showNewOppModal(){openModal('modal-new-opp');}
+function openModal(id){const el=document.getElementById(id);if(el)el.style.display='flex';}
+
 function resolvePermissions(user) {
   if(!user) return [];
   const cred = DB.userCredentials.find(c=>+c.personId===+user.id);
@@ -3391,6 +3479,153 @@ async function startApp() {
       </div>`;
   }
 }
+function fmtNum(n){if(n===null||n===undefined||isNaN(n))return '0';return Math.round(+n).toLocaleString('en-ZA');}
+function parseCur(s){if(!s)return 0;return parseFloat(String(s).replace(/[^0-9.-]/g,''))||0;}
+function getType(id){return DB.projectServiceTypes.find(t=>+t.id===+id)||{};}
+function getStage(id){return DB.stages.find(s=>+s.id===+id)||{};}
+function getTCV(opp){
+  const streams = DB.opportunityStreams.filter(s=>+s.oppId===+opp.id);
+  if(streams.length) return streams.reduce((a,s)=>a+(+s.revenue||0),0);
+  return (+opp.base||0)*(+opp.months||0);
+}
+
+function showPage(page) {
+  const pages = document.querySelectorAll('.page');
+  pages.forEach(p=>p.classList.remove('active'));
+  const target = document.getElementById('page-'+page);
+  if(target) target.classList.add('active');
+  // Update sidebar active state
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  const navItem = document.querySelector('.nav-item[data-page="'+page+'"]');
+  if(navItem) navItem.classList.add('active');
+  // Render page content
+  if(page==='dashboard') renderDashboard();
+  else if(page==='opportunities'||page==='pipeline'||page==='lost') renderOppsTable(page);
+  else if(page==='forecast') renderForecast();
+  else if(page==='clients') renderOrgsTable();
+  else if(page==='users') renderUsersTable();
+  else if(page==='settings') renderSettings();
+}
+
+function renderDashboard() {
+  try {
+    const now = new Date();
+    const months = getFYMonths();
+    // Revenue forecast
+    const fcRevEl = document.getElementById('dash-fc-rev');
+    const fcGpEl = document.getElementById('dash-fc-gp');
+    if(fcRevEl){
+      const totalRev = DB.opportunityStreams
+        .filter(s=>months.includes(s.month))
+        .reduce((a,s)=>a+(+s.revenue||0),0);
+      const totalGP = DB.opportunityStreams
+        .filter(s=>months.includes(s.month))
+        .reduce((a,s)=>a+(+s.revenue||0)*(+s.margin||0),0);
+      fcRevEl.textContent = 'R '+fmtNum(totalRev);
+      if(fcGpEl) fcGpEl.textContent = 'R '+fmtNum(totalGP);
+    }
+    // Pipeline by stage
+    const stageEls = document.querySelectorAll('[data-stage-count]');
+    stageEls.forEach(el=>{
+      const stageId = +el.dataset.stageCount;
+      const count = DB.opportunities.filter(o=>+o.stageId===stageId).length;
+      el.textContent = count;
+    });
+    // Recent opps
+    const recentEl = document.getElementById('dash-recent-opps');
+    if(recentEl){
+      const recent = [...DB.opportunities]
+        .sort((a,b)=>new Date(b.createdDate||0)-new Date(a.createdDate||0))
+        .slice(0,5);
+      recentEl.innerHTML = recent.length ? recent.map(o=>{
+        const org = getOrg(o.orgId);
+        const stage = getStage(o.stageId);
+        return '<tr><td>'+o.name+'</td><td>'+(org.name||'')+'</td><td>'+(stage.stage||'')+'</td><td>R '+fmtNum(getTCV(o))+'</td></tr>';
+      }).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px;">No opportunities yet</td></tr>';
+    }
+  } catch(e){ console.error('renderDashboard error:', e); }
+}
+
+function renderForecast() {
+  try {
+    const el = document.getElementById('forecast-table');
+    if(!el) return;
+    const months = getFYMonths();
+    const rows = DB.opportunities.filter(o=>getStage(o.stageId).stage!=='Lost').map(o=>{
+      const org = getOrg(o.orgId);
+      const cells = months.map(m=>{
+        const s = DB.opportunityStreams.find(s=>+s.oppId===+o.id&&s.month===m);
+        return '<td style="text-align:right">'+(s?fmtNum(s.revenue):'')+'</td>';
+      }).join('');
+      return '<tr><td>'+o.name+'</td><td>'+(org.name||'')+'</td>'+cells+'</tr>';
+    }).join('');
+    el.innerHTML = rows || '<tr><td colspan="20" style="text-align:center;padding:20px;color:var(--text3);">No opportunities</td></tr>';
+  } catch(e){ console.error('renderForecast error:', e); }
+}
+
+function renderOppsTable(filter) {
+  try {
+    const el = document.getElementById('opps-table-body');
+    if(!el) return;
+    let opps = [...DB.opportunities];
+    if(filter==='pipeline') opps = opps.filter(o=>{ const s=getStage(o.stageId); return s.stage&&s.stage!=='Lost'&&s.stage!=='Secured'; });
+    else if(filter==='lost') opps = opps.filter(o=>getStage(o.stageId).stage==='Lost');
+    else if(filter==='opportunities') opps = opps.filter(o=>getStage(o.stageId).stage!=='Lost');
+    opps.sort((a,b)=>(b.createdDate||'').localeCompare(a.createdDate||''));
+    el.innerHTML = opps.length ? opps.map(o=>{
+      const org = getOrg(o.orgId);
+      const stage = getStage(o.stageId);
+      const owner = DB.people.find(p=>+p.id===+o.ownerId);
+      const tcv = getTCV(o);
+      return '<tr onclick="openOppForm('+o.id+')" style="cursor:pointer"><td>'+o.name+'</td><td>'+(org.name||'—')+'</td><td><span class="badge" style="background:'+( stage.color||'#888')+'20;color:'+(stage.color||'#888')+'">'+(stage.stage||'—')+'</span></td><td style="text-align:right">R '+fmtNum(tcv)+'</td><td>'+(owner?personInitials(owner):'—')+'</td></tr>';
+    }).join('') : '<tr><td colspan="5" style="text-align:center;padding:28px;color:var(--text3);">No opportunities yet</td></tr>';
+  } catch(e){ console.error('renderOppsTable error:', e); }
+}
+
+function renderOrgsTable() {
+  try {
+    const el = document.getElementById('clients-table-body');
+    if(!el) return;
+    el.innerHTML = DB.organisations.filter(o=>!o.hidden).map(o=>{
+      const oppCount = DB.opportunities.filter(op=>+op.orgId===+o.id).length;
+      return '<tr onclick="openOrgForm('+o.id+')" style="cursor:pointer"><td>'+o.name+'</td><td>'+(o.legalName||'')+'</td><td><span class="badge">'+(o.type||'client')+'</span></td><td>'+oppCount+'</td></tr>';
+    }).join('') || '<tr><td colspan="4" style="text-align:center;padding:28px;color:var(--text3);">No organisations yet</td></tr>';
+  } catch(e){ console.error('renderOrgsTable error:', e); }
+}
+
+function openOrgForm(id) {
+  const org = DB.organisations.find(o=>+o.id===+id);
+  if(!org) return;
+  window.currentOrgId = id;
+  const page = document.getElementById('client-form-page');
+  if(page) {
+    page.classList.add('active');
+    document.body.classList.add('sidebar-hidden');
+    // Populate fields
+    const fields = ['name','legalName','notes'];
+    fields.forEach(f=>{ const el=document.getElementById('cf-'+f); if(el) el.value=org[f]||''; });
+    const typeEl = document.getElementById('cf-type');
+    if(typeEl) typeEl.value = org.type||'client';
+  }
+}
+
+function saveOrgField(field, value) {
+  const org = DB.organisations.find(o=>+o.id===+currentOrgId);
+  if(!org) return;
+  org[field] = value;
+  sbSaveOrg(org);
+}
+
+function renderSettings() {
+  try {
+    // Render stages, regions etc in settings page
+    const stagesEl = document.getElementById('settings-stages-body');
+    if(stagesEl) {
+      stagesEl.innerHTML = DB.stages.map(s=>'<tr><td>'+s.stage+'</td><td>'+s.probMin+'-'+s.probMax+'%</td></tr>').join('');
+    }
+  } catch(e){ console.error('renderSettings error:', e); }
+}
+
 startApp();
 </script>
 <!-- MODAL: NEW CONTACT -->
