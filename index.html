@@ -1018,7 +1018,7 @@ async function sbUpdate(table, id, data) {
 }
 
 const DB_VERSION='5.0-xone';
-const APP_REVISION = 'r57';  // Increment this with each build
+const APP_REVISION = 'r58';  // Increment this with each build
 let DB={
   version:DB_VERSION,
   settings:{fyStart:7,escMonth:7,escRate:5,escDesc:'Revenue escalates every July by 5%'},
@@ -3224,6 +3224,103 @@ function resetAllData(){if(!confirm('Clear ALL data and reload with defaults?'))
 // INIT
 // ═══════════════════════════════════════════════
 // Start app — Supabase only
+async function loadFromSupabase() {
+  const [orgs, people, personAffils, userCreds, opps, streams, conStreams, actStreams,
+         oppPeople, interactions, risks, contracts, permOverrides, settings] = await Promise.all([
+    sbFetch('organisations','GET',null,'select=*'),
+    sbFetch('people','GET',null,'select=*'),
+    sbFetch('person_affiliations','GET',null,'select=*'),
+    sbFetch('user_credentials','GET',null,'select=*'),
+    sbFetch('opportunities','GET',null,'select=*'),
+    sbFetch('opportunity_streams','GET',null,'select=*'),
+    sbFetch('contract_streams','GET',null,'select=*'),
+    sbFetch('actual_streams','GET',null,'select=*'),
+    sbFetch('opportunity_people','GET',null,'select=*'),
+    sbFetch('interactions','GET',null,'select=*'),
+    sbFetch('risks','GET',null,'select=*'),
+    sbFetch('contracts','GET',null,'select=*'),
+    sbFetch('user_permission_overrides','GET',null,'select=*'),
+    sbFetch('settings','GET',null,'select=*'),
+  ]);
+
+  const [stages, regions, types, contactTypes, powerBases, titleRoles,
+         influenceLevels, supportLevels, relTypes, engPurposes, riskCats,
+         sectors, clientCats, roles, rolePerms] = await Promise.all([
+    sbFetch('stages','GET',null,'select=*'),
+    sbFetch('regions','GET',null,'select=*'),
+    sbFetch('project_service_types','GET',null,'select=*'),
+    sbFetch('contact_types','GET',null,'select=*'),
+    sbFetch('power_bases','GET',null,'select=*'),
+    sbFetch('title_roles','GET',null,'select=*'),
+    sbFetch('influence_levels','GET',null,'select=*'),
+    sbFetch('support_levels','GET',null,'select=*'),
+    sbFetch('relationship_types','GET',null,'select=*'),
+    sbFetch('engagement_purposes','GET',null,'select=*'),
+    sbFetch('risk_categories','GET',null,'select=*'),
+    sbFetch('industry_sectors','GET',null,'select=*'),
+    sbFetch('client_categories','GET',null,'select=*'),
+    sbFetch('roles','GET',null,'select=*'),
+    sbFetch('role_permissions','GET',null,'select=*'),
+  ]);
+
+  DB.organisations = (orgs||[]).map(r=>({id:r.id,name:r.name,legalName:r.legal_name,type:r.type||'client',industrySectorId:r.industry_sector_id,categoryIds:r.category_ids||[],notes:r.notes,createdDate:r.created_date}));
+  DB.people = (people||[]).map(r=>({id:r.id,first:r.first,last:r.last,email:r.email,phone:r.phone,title:r.title,isXone:r.is_xone||false,initials:r.initials,hidden:r.hidden||false,notes:r.notes}));
+  DB.personAffiliations = (personAffils||[]).map(r=>({id:r.id,personId:r.person_id,orgId:r.org_id,title:r.title,isPrimary:r.is_primary}));
+  DB.userCredentials = (userCreds||[]).map(r=>({id:r.id,personId:r.person_id,password:r.password,roleIds:r.role_ids||[3],active:r.active!==false,createdDate:r.created_date}));
+  DB.opportunities = (opps||[]).map(r=>({id:r.id,orgId:r.org_id,ownerId:r.owner_id,stageId:r.stage_id,regionId:r.region_id,typeId:r.type_id,name:r.name,desc:r.description,margin:r.margin||0.25,base:r.base||0,months:r.months||12,probability:r.probability||5,startDate:r.start_date,orderDate:r.order_date,closeDate:r.close_date,createdDate:r.created_date}));
+  DB.opportunityStreams = (streams||[]).map(r=>({id:r.id,oppId:r.opp_id,month:r.month,revenue:r.revenue||0,margin:r.margin||0}));
+  DB.contractStreams = (conStreams||[]).map(r=>({id:r.id,oppId:r.opp_id,month:r.month,revenue:r.revenue||0,margin:r.margin||0}));
+  DB.actualStreams = (actStreams||[]).map(r=>({id:r.id,oppId:r.opp_id,month:r.month,revenue:r.revenue||0,margin:r.margin||0}));
+  DB.opportunityPeople = (oppPeople||[]).map(r=>({id:r.id,oppId:r.opp_id,personId:r.person_id,role:r.role||'stakeholder',contactTypeId:r.contact_type_id,influenceLevelId:r.influence_level_id,supportLevelId:r.support_level_id,powerBaseId:r.power_base_id,relationshipTypeId:r.relationship_type_id,permissions:r.permissions||[]}));
+  DB.interactions = (interactions||[]).map(r=>({id:r.id,oppId:r.opp_id,date:r.date,time:r.time,purposeId:r.purpose_id,notes:r.notes,personIds:r.person_ids||[]}));
+  DB.risks = (risks||[]).map(r=>({id:r.id,oppId:r.opp_id,categoryId:r.category_id,subCategory:r.sub_category,description:r.description,likelihood:r.likelihood,impact:r.impact,rating:r.rating,mitigation:r.mitigation,ownerId:r.owner_id,status:r.status||'open'}));
+  DB.contracts = (contracts||[]).map(r=>({id:r.id,oppId:r.opp_id,startDate:r.start_date,endDate:r.end_date,notes:r.notes}));
+  DB.userPermissionOverrides = (permOverrides||[]).map(r=>({id:r.id,personId:r.person_id,permission:r.permission,type:r.type}));
+
+  DB.stages = (stages||[]).map(r=>({id:r.id,stage:r.stage,probMin:r.prob_min,probMax:r.prob_max,color:r.color}));
+  DB.regions = (regions||[]).map(r=>({id:r.id,value:r.value}));
+  DB.projectServiceTypes = (types||[]).map(mapType);
+  DB.contactTypes = (contactTypes||[]).map(r=>({id:r.id,type:r.type}));
+  DB.powerBases = (powerBases||[]).map(r=>({id:r.id,value:r.value}));
+  DB.titleRoles = (titleRoles||[]).map(r=>({id:r.id,value:r.value}));
+  DB.influenceLevels = (influenceLevels||[]).map(r=>({id:r.id,value:r.value}));
+  DB.supportLevels = (supportLevels||[]).map(r=>({id:r.id,value:r.value}));
+  DB.relationshipTypes = (relTypes||[]).map(r=>({id:r.id,value:r.value}));
+  DB.engagementPurposes = (engPurposes||[]).map(r=>({id:r.id,value:r.value}));
+  DB.riskCategories = (riskCats||[]).map(r=>({id:r.id,category:r.category,subCategory:r.sub_category}));
+  DB.industrySectors = (sectors||[]).map(r=>({id:r.id,value:r.value}));
+  DB.clientCategories = (clientCats||[]).map(r=>({id:r.id,value:r.value}));
+
+  if(roles&&roles.length) {
+    DB.rolePermissions = {};
+    (rolePerms||[]).forEach(rp=>{ if(!DB.rolePermissions[rp.role_id]) DB.rolePermissions[rp.role_id]=[]; DB.rolePermissions[rp.role_id].push(rp.permission); });
+  }
+
+  if(settings&&settings.length) {
+    const appS=settings.find(s=>s.key==='app_settings');
+    if(appS&&appS.value) try{Object.assign(DB.settings,JSON.parse(appS.value));}catch(e){}
+    const devN=settings.find(s=>s.key==='dev_notes');
+    if(devN&&devN.value) try{devNotesData=JSON.parse(devN.value);}catch(e){}
+  }
+
+  const maxId=arr=>arr&&arr.length?Math.max(...arr.map(i=>+i.id||0))+1:1;
+  DB.nextIds.org=maxId(DB.organisations);
+  DB.nextIds.person=maxId(DB.people);
+  DB.nextIds.affiliation=maxId(DB.personAffiliations);
+  DB.nextIds.credential=maxId(DB.userCredentials);
+  DB.nextIds.opp=maxId(DB.opportunities);
+  DB.nextIds.rs=maxId(DB.opportunityStreams);
+  DB.nextIds.baseline=maxId(DB.contractStreams);
+  DB.nextIds.actual=maxId(DB.actualStreams);
+  DB.nextIds.oppPerson=maxId(DB.opportunityPeople);
+  DB.nextIds.contract=maxId(DB.contracts);
+  DB.nextIds.interaction=maxId(DB.interactions);
+  DB.nextIds.risk=maxId(DB.risks);
+  DB.nextIds.stage=maxId(DB.stages);
+  DB.nextIds.region=maxId(DB.regions);
+  DB.nextIds.type=maxId(DB.projectServiceTypes);
+}
+
 async function startApp() {
     showLoadingOverlay('Connecting to database...');
   try {
