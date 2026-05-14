@@ -1,5 +1,5 @@
 [build]
   functions = "netlify/functions"
 
-[context.production.environment]
-  SECRETS_SCAN_OMIT_KEYS = "SB_KEY"
+[build.environment]
+  SECRETS_SCAN_OMIT_PATHS = "index.html"
