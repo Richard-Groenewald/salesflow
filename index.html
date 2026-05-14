@@ -44,8 +44,8 @@ body{font-family:Arial,sans-serif;background:var(--bg);color:var(--text);min-hei
 .btn-sm{padding:5px 12px;font-size:12px;}
 .sf-th{position:relative;cursor:pointer;user-select:none;padding-right:28px!important;}
 .sf-th:hover{background:var(--bg3)!important;}
-.sf-th-inner{display:flex;align-items:center;justify-content:space-between;gap:4px;}
-.sf-th-label{flex:1;}
+.sf-th-inner{display:flex;align-items:center;justify-content:space-between;gap:2px;overflow:hidden;width:100%;}
+.sf-th-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
 .sf-th-icons{display:flex;flex-direction:column;gap:1px;align-items:center;flex-shrink:0;}
 .sf-sort-icon{font-size:8px;color:var(--text3);line-height:1;}
 .sf-sort-icon.active{color:var(--red);}
@@ -1018,7 +1018,7 @@ async function sbUpdate(table, id, data) {
 }
 
 const DB_VERSION='5.0-xone';
-const APP_REVISION = 'r31';  // Increment this with each build
+const APP_REVISION = 'r34';  // Increment this with each build
 let DB={
   version:DB_VERSION,
   settings:{fyStart:7,escMonth:7,escRate:5,escDesc:'Revenue escalates every July by 5%'},
@@ -1490,8 +1490,8 @@ const OPP_COLS = [
   {key:'stage',     label:'Stage',       align:'right', width:'90px',  filterType:'multisel',  getValue:o=>getStage(o.stageId).stage||''},
   {key:'prob',      label:'Probability', align:'right', width:'90px',  filterType:'range',     getValue:o=>o.probability||0},
   {key:'service',   label:'Service',     align:'right', width:'140px', filterType:'multisel',  getValue:o=>getType(o.typeId).subCategory||''},
-  {key:'startDate', label:'Start Date',  align:'right', width:'90px',  filterType:'daterange', getValue:o=>o.startDate||''},
-  {key:'owner',     label:'Owner',       align:'right', width:'60px',  filterType:'multisel',  getValue:o=>getOwner(o.ownerId).initials||''},
+  {key:'startDate', label:'Start Date',  align:'right', width:'96px',  filterType:'daterange', getValue:o=>o.startDate||''},
+  {key:'owner',     label:'Owner',       align:'right', width:'72px',  filterType:'multisel',  getValue:o=>getOwner(o.ownerId).initials||''},
 ];
 
 function oppTblCols(opps) {
@@ -1546,13 +1546,15 @@ function oppTblCols(opps) {
         +'</div><div style="max-height:200px;overflow-y:auto;">'+items+'</div>'+cb;
     }
     const labelAlign = col.align==='right'?'text-align:right;':col.align==='center'?'text-align:center;':'';
-    return '<th class="sf-th" style="'+aw+ww+'" onclick="handleThClick(event,\''+k+'\')">'
-      +'<div class="sf-th-inner"><span class="sf-th-label" style="'+labelAlign+'">'+col.label+'</span>'
-      +'<div class="sf-th-icons">'
+    const icons = '<div class="sf-th-icons">'
       +'<span class="sf-sort-icon '+(sd==='asc'?'active':'')+'">&#9650;</span>'
       +'<span class="sf-sort-icon '+(sd==='desc'?'active':'')+'">&#9660;</span>'
       +'<span class="sf-filter-icon '+(hasF?'active':'')+'">&#9661;</span>'
-      +'</div></div>'
+      +'</div>';
+    const label = '<span class="sf-th-label" style="'+labelAlign+'">'+col.label+'</span>';
+    const inner = col.align==='right' ? icons+label : label+icons;
+    return '<th class="sf-th" style="'+aw+ww+'" onclick="handleThClick(event,\''+k+'\')">'
+      +'<div class="sf-th-inner">'+inner+'</div>'
       +'<div class="sf-dropdown" id="sf-dd-'+k+'" onclick="event.stopPropagation()">'+body+'</div>'
       +'</th>';
   }).join('');
@@ -2937,15 +2939,34 @@ function createParentClient() {
 }
 // ── DEV NOTES ─────────────────────────────────────────────────────────────
 let devNotesOpen = false;
+let devNotesData = [];
+let devNoteCurrentType = 'Observation';
+
+function devNoteSetType(type) {
+  devNoteCurrentType = type;
+  ['Bug','Feature','Improvement','Observation'].forEach(t => {
+    const btn = document.getElementById('dnt-'+t);
+    if(!btn) return;
+    const colors = {Bug:'#FA0A11', Feature:'rgb(0,106,193)', Improvement:'rgb(0,172,178)', Observation:'#888'};
+    const c = colors[t];
+    if(t === type) {
+      btn.style.background = c;
+      btn.style.color = '#fff';
+    } else {
+      btn.style.background = '#fff';
+      btn.style.color = c;
+    }
+  });
+  document.getElementById('dev-notes-input')?.focus();
+}
 
 function openDevNotes() {
   const modal = document.getElementById('modal-dev-notes');
   if(!modal) return;
   modal.style.display = 'flex';
   devNotesOpen = true;
-  // Load from Supabase
+  devNoteSetType('Observation');
   loadDevNotes();
-  setTimeout(() => document.getElementById('dev-notes-editor')?.focus(), 100);
 }
 
 function closeDevNotes() {
@@ -2954,20 +2975,67 @@ function closeDevNotes() {
   devNotesOpen = false;
 }
 
-async function loadDevNotes() {
-  const res = await sbFetch('settings','GET',null,'key=eq.dev_notes&select=value');
-  if(res && res.length && res[0].value) {
-    try {
-      const parsed = JSON.parse(res[0].value);
-      if(Array.isArray(parsed)) devNotesData = parsed;
-      else devNotesData = [{id:Date.now(),text:res[0].value,date:new Date().toISOString(),implemented:false}];
-    } catch(e) {
-      // Legacy plain text - migrate to structured
-      devNotesData = res[0].value.trim() ? [{id:Date.now(),text:res[0].value,date:new Date().toISOString(),implemented:false}] : [];
-    }
-  }
+function addDevNoteEntry() {
+  const el = document.getElementById('dev-notes-input');
+  if(!el || !el.value.trim()) return;
+  const entry = {
+    id: Date.now(),
+    type: devNoteCurrentType,
+    text: el.value.trim(),
+    date: new Date().toISOString(),
+    implemented: false
+  };
+  devNotesData.push(entry);
+  el.value = '';
   renderDevNotes();
+  saveDevNotes();
   updateDevNotesCount();
+}
+
+function toggleDevNoteImplemented(id) {
+  const entry = devNotesData.find(e => e.id === id);
+  if(entry) { entry.implemented = !entry.implemented; renderDevNotes(); saveDevNotes(); updateDevNotesCount(); }
+}
+
+function deleteDevNote(id) {
+  devNotesData = devNotesData.filter(e => e.id !== id);
+  renderDevNotes(); saveDevNotes(); updateDevNotesCount();
+}
+
+function renderDevNotes() {
+  const list = document.getElementById('dev-notes-list');
+  if(!list) return;
+  if(!devNotesData.length) {
+    list.innerHTML = '<div style="text-align:center;color:#aaa;padding:32px 20px;font-family:Arial,sans-serif;font-size:13px;">No notes yet. Select a type and describe your observation below.</div>';
+    return;
+  }
+  const colors = {Bug:'#FA0A11', Feature:'rgb(0,106,193)', Improvement:'rgb(0,172,178)', Observation:'#888'};
+  list.innerHTML = [...devNotesData].reverse().map(e => {
+    const c = colors[e.type] || '#888';
+    const d = new Date(e.date).toLocaleDateString('en-ZA',{day:'2-digit',month:'short',year:'numeric'});
+    const implStyle = e.implemented ? 'opacity:0.5;' : '';
+    const textStyle = e.implemented ? 'text-decoration:line-through;color:#aaa;' : 'color:#001e38;';
+    return '<div style="background:#fff;border:1px solid #e0e8f0;border-left:3px solid '+c+';border-radius:8px;padding:11px 14px;margin-bottom:8px;'+implStyle+'">'
+      + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">'
+      + '<div style="flex:1;">'
+      + '<div style="font-size:10px;font-weight:700;color:'+c+';text-transform:uppercase;letter-spacing:0.06em;margin-bottom:5px;">'+e.type+' · '+d+'</div>'
+      + '<div style="font-size:13px;line-height:1.55;'+textStyle+'white-space:pre-wrap;">'+e.text.replace(/</g,'&lt;')+'</div>'
+      + '</div>'
+      + '<div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0;margin-left:8px;">'
+      + '<button onclick="toggleDevNoteImplemented('+e.id+')" style="font-size:11px;font-weight:600;font-family:Arial,sans-serif;padding:5px 12px;border-radius:6px;cursor:pointer;white-space:nowrap;border:1px solid #3ecf8e;background:'+(e.implemented?'#3ecf8e':'#fff')+';color:'+(e.implemented?'#fff':'#3ecf8e')+';">'+(e.implemented?'✓ Done':'✓ Implemented')+'</button>'
+      + '<button onclick="deleteDevNote('+e.id+')" style="font-size:11px;font-family:Arial,sans-serif;padding:5px 12px;border-radius:6px;cursor:pointer;border:1px solid #eee;background:#fff;color:#ccc;">Delete</button>'
+      + '</div>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function updateDevNotesCount() {
+  const el = document.getElementById('dev-notes-count');
+  if(el) {
+    const open = devNotesData.filter(e=>!e.implemented).length;
+    el.textContent = open + ' open · ' + devNotesData.length + ' total';
+  }
 }
 
 async function saveDevNotes() {
@@ -2982,42 +3050,34 @@ async function saveDevNotes() {
   if(saved) { saved.textContent = 'Saved ✓'; setTimeout(()=>saved.textContent='',2000); }
 }
 
-function insertDevNote(prefix) {
-  const el = document.getElementById('dev-notes-editor');
-  if(!el) return;
-  const now = new Date().toLocaleDateString('en-ZA',{day:'2-digit',month:'short',year:'numeric'});
-  const insert = '\n\n' + prefix + ' [' + now + ']\n';
-  const pos = el.selectionStart;
-  el.value = el.value.slice(0, pos) + insert + el.value.slice(pos);
-  el.selectionStart = el.selectionEnd = pos + insert.length;
-  el.focus();
+async function loadDevNotes() {
+  const res = await sbFetch('settings','GET',null,'key=eq.dev_notes&select=value');
+  if(res && res.length && res[0].value) {
+    try {
+      const parsed = JSON.parse(res[0].value);
+      devNotesData = Array.isArray(parsed) ? parsed : [];
+    } catch(e) { devNotesData = []; }
+  } else { devNotesData = []; }
+  renderDevNotes();
   updateDevNotesCount();
 }
 
-function updateDevNotesCount() {
-  const el = document.getElementById('dev-notes-editor');
-  const countEl = document.getElementById('dev-notes-count');
-  if(el && countEl) countEl.textContent = el.value.length.toLocaleString() + ' characters';
-}
-
 function copyDevNotes() {
-  const el = document.getElementById('dev-notes-editor');
-  if(!el) return;
-  navigator.clipboard.writeText(el.value).then(() => {
-    const btn = document.querySelector('#modal-dev-notes button[onclick="copyDevNotes()"]');
-    if(btn) { const orig=btn.textContent; btn.textContent='✓ Copied!'; setTimeout(()=>btn.textContent=orig,2000); }
+  const open = devNotesData.filter(e=>!e.implemented);
+  const text = open.map(e=>'['+e.type+'] '+e.text).join('\n\n');
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('dev-notes-copy-btn');
+    if(btn) { const o=btn.textContent; btn.textContent='✓ Copied!'; setTimeout(()=>btn.textContent=o,2000); }
   });
 }
 
-// Auto-save every 30 seconds while open
-setInterval(() => { if(devNotesOpen) saveDevNotes(); }, 30000);
+setInterval(() => { if(devNotesOpen && devNotesData.length) saveDevNotes(); }, 30000);
 
-// Update character count on typing
-document.addEventListener('input', e => {
-  if(e.target.id === 'dev-notes-editor') updateDevNotesCount();
+document.addEventListener('keydown', e => {
+  if(e.target && e.target.id==='dev-notes-input' && e.key==='Enter' && (e.ctrlKey||e.metaKey)) addDevNoteEntry();
 });
 
-function closeClientForm(){saveCurrentClient();document.getElementById('client-form-page').classList.remove('active');document.body.classList.remove('sidebar-hidden');showPage('clients');}
+function closeClientForm(){function closeClientForm(){saveCurrentClient();document.getElementById('client-form-page').classList.remove('active');document.body.classList.remove('sidebar-hidden');showPage('clients');}
 function saveClientField(field,value){
   const c=DB.clients.find(cl=>+cl.id===+currentClientId);if(!c)return;
   if(['sectorId','accountManagerId','parentId'].includes(field))c[field]=value?+value:null;else c[field]=value;
@@ -3717,47 +3777,45 @@ startApp();
   </div>
   <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
 <!-- DEV NOTES FLOATING BUTTON -->
-<button onclick="openDevNotes()" title="Developer Notes" style="position:fixed;bottom:24px;right:24px;z-index:9999;width:48px;height:48px;border-radius:50%;background:#FA0A11;border:none;color:#fff;font-size:20px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;transition:transform 0.15s;">&#9998;</button>
+<button onclick="openDevNotes()" title="Developer Notes" style="position:fixed;bottom:24px;right:24px;z-index:9999;width:48px;height:48px;border-radius:50%;background:#FA0A11;border:none;color:#fff;font-size:20px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;">&#9998;</button>
 
 <!-- DEV NOTES MODAL -->
 <div id="modal-dev-notes" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,20,40,0.75);align-items:center;justify-content:center;">
-  <div style="background:#fff;border-radius:14px;width:680px;max-width:95vw;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+  <div style="background:#fff;border-radius:14px;width:700px;max-width:95vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.4);overflow:hidden;">
+    
     <!-- Header -->
-    <div style="background:#001e38;border-radius:14px 14px 0 0;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;">
+    <div style="background:#001e38;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
       <div>
         <div style="color:#fff;font-size:14px;font-weight:700;font-family:Arial,sans-serif;">&#9998; Developer Notes</div>
-        <div style="color:rgba(255,255,255,0.5);font-size:10.5px;font-family:Arial,sans-serif;margin-top:2px;">Thoughts, observations, bugs and feature requests — becomes instructions to Claude</div>
+        <div style="color:rgba(255,255,255,0.45);font-size:10.5px;font-family:Arial,sans-serif;margin-top:2px;">Record bugs, features and observations — paste into Claude to action</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <span id="dev-notes-saved" style="font-size:10px;color:rgba(255,255,255,0.4);font-family:Arial,sans-serif;"></span>
-        <button onclick="saveDevNotes()" style="background:#FA0A11;color:#fff;border:none;border-radius:7px;padding:7px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:Arial,sans-serif;">Save</button>
-        <button onclick="closeDevNotes()" style="background:rgba(255,255,255,0.1);color:#fff;border:none;border-radius:7px;padding:7px 14px;font-size:12px;cursor:pointer;font-family:Arial,sans-serif;">&#215; Close</button>
+        <button id="dev-notes-copy-btn" onclick="copyDevNotes()" style="background:#003057;color:#fff;border:none;border-radius:7px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:Arial,sans-serif;">&#128203; Copy Open</button>
+        <button onclick="closeDevNotes()" style="background:rgba(255,255,255,0.1);color:#fff;border:none;border-radius:7px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:Arial,sans-serif;">&#215; Close</button>
       </div>
     </div>
-    <!-- Toolbar -->
-    <div style="background:#f4f7fa;border-bottom:1px solid #dde5ee;padding:8px 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-      <button onclick="insertDevNote('## Bug: ')" style="font-size:11px;background:#fff;border:1px solid #dde5ee;border-radius:5px;padding:4px 10px;cursor:pointer;color:#FA0A11;font-weight:600;">🐛 Bug</button>
-      <button onclick="insertDevNote('## Feature Request: ')" style="font-size:11px;background:#fff;border:1px solid #dde5ee;border-radius:5px;padding:4px 10px;cursor:pointer;color:rgb(0,106,193);font-weight:600;">✨ Feature</button>
-      <button onclick="insertDevNote('## Improvement: ')" style="font-size:11px;background:#fff;border:1px solid #dde5ee;border-radius:5px;padding:4px 10px;cursor:pointer;color:rgb(0,172,178);font-weight:600;">⚡ Improve</button>
-      <button onclick="insertDevNote('## Observation: ')" style="font-size:11px;background:#fff;border:1px solid #dde5ee;border-radius:5px;padding:4px 10px;cursor:pointer;color:#666;font-weight:600;">💡 Note</button>
-      <div style="margin-left:auto;font-size:10px;color:#999;font-family:Arial,sans-serif;">Saved to Supabase · Paste into Claude to action</div>
-    </div>
+
     <!-- Entry list -->
-    <div id="dev-notes-list" style="flex:1;overflow-y:auto;padding:12px 16px;background:#fafcff;min-height:300px;"></div>
-    <!-- New entry input -->
-    <div style="border-top:1px solid #dde5ee;padding:12px 16px;background:#f4f7fa;">
-      <textarea id="dev-notes-input" rows="3"
-        style="width:100%;border:1px solid #dde5ee;border-radius:8px;padding:10px 12px;font-size:13px;font-family:'Courier New',monospace;line-height:1.6;resize:none;outline:none;color:#001e38;background:#fff;box-sizing:border-box;"
-        placeholder="Write a new note, bug, feature request or observation..."></textarea>
-      <div style="display:flex;justify-content:flex-end;margin-top:6px;">
-        <button onclick="addDevNoteEntry()" style="background:#FA0A11;color:#fff;border:none;border-radius:7px;padding:7px 18px;font-size:12px;font-weight:600;cursor:pointer;font-family:Arial,sans-serif;">Add Note</button>
+    <div id="dev-notes-list" style="flex:1;overflow-y:auto;padding:12px 16px;background:#f4f7fa;min-height:200px;"></div>
+
+    <!-- Add new entry area -->
+    <div style="border-top:1px solid #dde5ee;padding:12px 16px;background:#fff;flex-shrink:0;">
+      <!-- Type buttons -->
+      <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
+        <button onclick="devNoteSetType('Bug')" id="dnt-Bug" style="font-size:11px;border-radius:5px;padding:4px 12px;cursor:pointer;border:1px solid #FA0A11;background:#fff;color:#FA0A11;font-weight:600;font-family:Arial,sans-serif;">🐛 Bug</button>
+        <button onclick="devNoteSetType('Feature')" id="dnt-Feature" style="font-size:11px;border-radius:5px;padding:4px 12px;cursor:pointer;border:1px solid rgb(0,106,193);background:#fff;color:rgb(0,106,193);font-weight:600;font-family:Arial,sans-serif;">✨ Feature</button>
+        <button onclick="devNoteSetType('Improvement')" id="dnt-Improvement" style="font-size:11px;border-radius:5px;padding:4px 12px;cursor:pointer;border:1px solid rgb(0,172,178);background:#fff;color:rgb(0,172,178);font-weight:600;font-family:Arial,sans-serif;">⚡ Improvement</button>
+        <button onclick="devNoteSetType('Observation')" id="dnt-Observation" style="font-size:11px;border-radius:5px;padding:4px 12px;cursor:pointer;border:1px solid #888;background:#fff;color:#888;font-weight:600;font-family:Arial,sans-serif;">💡 Observation</button>
+        <span id="dev-notes-count" style="margin-left:auto;font-size:10.5px;color:#999;font-family:Arial,sans-serif;align-self:center;"></span>
+      </div>
+      <!-- Text input -->
+      <div style="display:flex;gap:8px;align-items:flex-end;">
+        <textarea id="dev-notes-input" rows="2" style="flex:1;border:1px solid #dde5ee;border-radius:8px;padding:9px 12px;font-size:13px;font-family:Arial,sans-serif;line-height:1.5;resize:none;outline:none;color:#001e38;background:#fafcff;box-sizing:border-box;" placeholder="Describe the bug, feature or observation..."></textarea>
+        <button onclick="addDevNoteEntry()" style="background:#FA0A11;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:12px;font-weight:700;cursor:pointer;font-family:Arial,sans-serif;white-space:nowrap;height:fit-content;">Add</button>
       </div>
     </div>
-    <!-- Footer -->
-    <div style="background:#f4f7fa;border-radius:0 0 14px 14px;padding:8px 16px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid #dde5ee;">
-      <div style="font-size:10.5px;color:#999;font-family:Arial,sans-serif;" id="dev-notes-count">0 entries</div>
-      <button onclick="copyDevNotes()" style="background:#003057;color:#fff;border:none;border-radius:7px;padding:7px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:Arial,sans-serif;">&#128203; Copy Open to Clipboard</button>
-    </div>
+
   </div>
 </div>
 
