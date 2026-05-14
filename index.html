@@ -1026,7 +1026,7 @@ async function sbUpdate(table, id, data) {
 }
 
 const DB_VERSION='5.0-xone';
-const APP_REVISION = 'r95';  // Increment this with each build
+const APP_REVISION = 'r97';  // Increment this with each build
 let DB={
   version:DB_VERSION,
   settings:{fyStart:7,escMonth:7,escRate:5,escDesc:'Revenue escalates every July by 5%'},
@@ -1204,19 +1204,6 @@ function resolvePermissions(user) {
   overrides.forEach(o=>{ if(o.grant) rolePerms.add(o.permission); else rolePerms.delete(o.permission); });
   return [...rolePerms];
 }
-function resolvePermissions(user) {
-  if(!user) return [];
-  const cred = DB.userCredentials.find(c=>+c.personId===+user.id);
-  const roleIds = cred ? (cred.roleIds||[]) : (user.roleIds||[]);
-  let perms = [];
-  roleIds.forEach(rid => { perms = perms.concat(DB.rolePermissions[rid]||[]); });
-  // Apply overrides
-  DB.userPermissionOverrides.filter(o=>+o.personId===+user.id).forEach(o=>{
-    if(o.type==='grant' && !perms.includes(o.permission)) perms.push(o.permission);
-    if(o.type==='deny') perms = perms.filter(p=>p!==o.permission);
-  });
-  return [...new Set(perms)];
-}
 
 function refreshCurrentUserPerms() {
   if(!currentUser) return;
@@ -1241,7 +1228,6 @@ function canOnDeal(oppId, permission) {
 // HELPERS
 // ═══════════════════════════════════════════════
 const parseCur=v=>Math.round(parseFloat(String(v).replace(/[^0-9.]/g,''))||0);
-const fmtNum=n=>Math.round(n||0).toString().replace(/\B(?=(\d{3})+(?!\d))/g,',');
 const fmt=n=>'R '+fmtNum(n||0);
 const fmtM=n=>{const v=Math.round(n||0);return v>=1000000?'R '+(v/1000000).toFixed(1).replace(/\.0$/,'')+'M':v>=1000?'R '+Math.round(v/1000)+'K':'R '+fmtNum(v);};
 const getStage=id=>DB.stages.find(s=>+s.id===+id)||{};
@@ -1424,15 +1410,6 @@ function createInlineClient(){
     return; // nudge user to use the warning buttons
   }
   forceCreateInlineClient();
-}
-function showNewOppModal(){
-  const cs=document.getElementById('new-opp-org');
-  cs.innerHTML='<option value="">— Select organisation —</option>'+DB.organisations.map(c=>`<option value="${c.id}">${c.name}${c.formal?' — '+c.formal:''}</option>`).join('');
-  document.getElementById('new-opp-stage').innerHTML=DB.stages.map(s=>`<option value="${s.id}">${s.stage}</option>`).join('');
-  document.getElementById('new-opp-name').value='';
-  document.getElementById('inline-client-panel').style.display='none';
-  document.getElementById('btn-inline-client').textContent='+ New Client';
-  openModal('modal-new-opp');setTimeout(()=>document.getElementById('new-opp-name').focus(),100);
 }
 function createNewOpp(){
   const name=document.getElementById('new-opp-name').value.trim();if(!name)return alert('Opportunity name required.');
