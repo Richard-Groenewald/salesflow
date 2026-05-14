@@ -1018,7 +1018,7 @@ async function sbUpdate(table, id, data) {
 }
 
 const DB_VERSION='5.0-xone';
-const APP_REVISION = 'r58';  // Increment this with each build
+const APP_REVISION = 'r59';  // Increment this with each build
 let DB={
   version:DB_VERSION,
   settings:{fyStart:7,escMonth:7,escRate:5,escDesc:'Revenue escalates every July by 5%'},
@@ -3224,6 +3224,20 @@ function resetAllData(){if(!confirm('Clear ALL data and reload with defaults?'))
 // INIT
 // ═══════════════════════════════════════════════
 // Start app — Supabase only
+function mapType(r){
+  return {id:r.id, majorCategory:r.major_category, subCategory:r.sub_category,
+    defaultMargin:r.default_margin, minMargin:r.min_margin||0,
+    defaultDuration:r.default_months, recurring:r.recurring};
+}
+
+function lkpToSb(key, item) {
+  if(key==='stages') return {id:item.id, stage:item.stage, prob_min:item.probMin, prob_max:item.probMax, color:item.color};
+  if(key==='projectServiceTypes') return {id:item.id, major_category:item.majorCategory, sub_category:item.subCategory, default_margin:item.defaultMargin||item.margin||0, default_months:item.defaultDuration||item.months||0, recurring:!!item.recurring, min_margin:item.minMargin||0};
+  if(key==='riskCategories') return {id:item.id, category:item.category, sub_category:item.subCategory};
+  if(key==='contactTypes') return {id:item.id, type:item.type};
+  return {id:item.id, value:item.value};
+}
+
 async function loadFromSupabase() {
   const [orgs, people, personAffils, userCreds, opps, streams, conStreams, actStreams,
          oppPeople, interactions, risks, contracts, permOverrides, settings] = await Promise.all([
