@@ -1019,7 +1019,7 @@ async function sbUpdate(table, id, data) {
 }
 
 const DB_VERSION='5.0-xone';
-const APP_REVISION = 'r46';  // Increment this with each build
+const APP_REVISION = 'r50';  // Increment this with each build
 let DB={
   version:DB_VERSION,
   settings:{fyStart:7,escMonth:7,escRate:5,escDesc:'Revenue escalates every July by 5%'},
@@ -1801,7 +1801,7 @@ function renderLkpSection(sec,forceOpen){
       {label:'Target Margin', flex:'0 0 72px', align:'center'},
       {label:'Min Margin', flex:'0 0 72px', align:'center'},
       {label:'Months', flex:'0 0 48px', align:'center'},
-      {label:'Rec', flex:'0 0 36px', align:'center'},
+      {label:'Recurring Revenue', flex:'0 0 100px', align:'center'},
     ];
     cols.forEach(c=>{
       const s=document.createElement('span');
@@ -1841,7 +1841,7 @@ function renderLkpSection(sec,forceOpen){
     if(hasRec){
       const lbl=document.createElement('label');lbl.style.cssText='display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text2);white-space:nowrap;cursor:pointer;';
       const chk=document.createElement('input');chk.type='checkbox';chk.checked=!!item.recurring;chk.style.cssText='accent-color:var(--red);width:14px;height:14px;';chk.onchange=(function(id){return function(){updateLkp(key,id,'recurring',this.checked);};})(item.id);
-      lbl.appendChild(chk);lbl.appendChild(document.createTextNode('Rec'));ml.appendChild(lbl);
+      lbl.appendChild(chk);ml.appendChild(lbl);
     }
     const del=document.createElement('button');del.className='lkp-del';del.textContent='×';del.title='Remove';del.onclick=(function(id){return function(){deleteLkp(key,id);};})(item.id);ml.appendChild(del);
     row.appendChild(ml);
@@ -2024,7 +2024,15 @@ function openOppForm(oppId){
   document.getElementById('otf-stage').innerHTML=DB.stages.map(s=>`<option value="${s.id}" ${+s.id===+o.stageId?'selected':''}>${s.stage}</option>`).join('');
   document.getElementById('otf-order').value=o.orderDate||'';
   document.getElementById('otf-prob').value=o.probability||'';
-  document.getElementById('otf-margin').value=o.margin||'';
+  // Show margin as % (stored as decimal 0.25, shown as 25%)
+  const marginInput = document.getElementById('otf-margin');
+  if(marginInput) {
+    const t0m = getType(o.typeId);
+    const marginPct = o.margin && o.margin > 0 ? Math.round(o.margin*1000)/10 : (t0m ? t0m.defaultMargin : 0);
+    marginInput.value = marginPct;
+    const hintEl = document.getElementById('otf-margin-hint');
+    if(hintEl && t0m) hintEl.textContent = 'default '+t0m.defaultMargin+'%'+(t0m.minMargin?' · min '+t0m.minMargin+'%':'');
+  }
   document.getElementById('otf-base').value=o.base?fmtNum(o.base):'';
   document.getElementById('otf-months').value=o.months||'';
   const startEl = document.getElementById('otf-start');
@@ -2091,7 +2099,7 @@ function saveCurrentOpp(){
   saveOppField('stageId',document.getElementById('otf-stage').value);
   saveOppField('orderDate',document.getElementById('otf-order').value);
   saveOppField('base',parseCur(document.getElementById('otf-base').value));
-  saveOppField('margin',parseFloat(document.getElementById('otf-margin').value)||0);
+  saveOppField('margin',(parseFloat(document.getElementById('otf-margin').value)||0)/100);
   saveOppField('months',parseInt(document.getElementById('otf-months').value)||0);
   saveOppField('startDate',document.getElementById('otf-start').value);
   saveOppField('escMonth',document.getElementById('otf-esc-month').value||null);
@@ -2133,7 +2141,7 @@ function validateProb(inp){
 }
 function onCommercialChange(){
   saveOppField('base',parseCur(document.getElementById('otf-base').value));
-  saveOppField('margin',parseFloat(document.getElementById('otf-margin').value)||0);
+  saveOppField('margin',(parseFloat(document.getElementById('otf-margin').value)||0)/100);
   saveOppField('months',parseInt(document.getElementById('otf-months').value)||0);
   updateCommCalcs();
 }
@@ -2168,6 +2176,35 @@ function onMajorCatChange(major){
   const ss=document.getElementById('otf-sub');if(!ss)return;
   ss.innerHTML=subs.map(t=>`<option value="${t.id}">${t.subCategory||'(none)'}</option>`).join('');
   if(subs.length){saveOppField('typeId',subs[0].id);updateRecBadge(subs[0].id);applyTypeDefaults(subs[0].id);updateRecurringUI(subs[0].id);}
+}
+function onMarginChange(val) {
+  const o = DB.opportunities.find(op=>+op.id===+currentOppId); if(!o) return;
+  const t = getType(o.typeId);
+  const minM = t ? (t.minMargin||0) : 0;
+  const defM = t ? (t.defaultMargin||0) : 0;
+  let pct = parseFloat(val);
+  if(isNaN(pct) || val === '') { pct = defM; document.getElementById('otf-margin').value = pct; }
+  if(pct < minM) { pct = minM; document.getElementById('otf-margin').value = pct; showToast('Margin cannot be below minimum of ' + minM + '%'); }
+  if(pct > 100) { pct = 100; document.getElementById('otf-margin').value = pct; }
+  o.margin = pct / 100;
+  sbSaveOpp(o);
+  updateCommCalcs();
+}
+
+function onTypeChange(typeId){
+  const t=getType(typeId);
+  // Set margin to type default (shown as %, stored as decimal)
+  const me=document.getElementById('otf-margin');
+  if(me&&t&&t.defaultMargin!==undefined){
+    me.value=t.defaultMargin;
+    saveOppField('margin',t.defaultMargin/100);
+  }
+  const hintEl2=document.getElementById('otf-margin-hint');
+  if(hintEl2&&t) hintEl2.textContent='default '+t.defaultMargin+'%'+(t.minMargin?' · min '+t.minMargin+'%':'');
+  saveOppField('typeId',typeId);
+  updateRecBadge(typeId);
+  applyTypeDefaults(typeId);
+  updateRecurringUI(typeId);
 }
 function onSubCatChange(typeId){saveOppField('typeId',typeId);updateRecBadge(typeId);applyTypeDefaults(typeId);updateRecurringUI(typeId);}
 function updateRecBadge(typeId){
