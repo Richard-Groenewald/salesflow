@@ -1023,7 +1023,7 @@ async function sbUpdate(table, id, data) {
 }
 
 const DB_VERSION='5.0-xone';
-const APP_REVISION = 'r82';  // Increment this with each build
+const APP_REVISION = 'r83';  // Increment this with each build
 let DB={
   version:DB_VERSION,
   settings:{fyStart:7,escMonth:7,escRate:5,escDesc:'Revenue escalates every July by 5%'},
@@ -1109,7 +1109,7 @@ let DB={
   },
   userPermissionOverrides:[], // {userId, permission, grant:true/false}
   dealCollaborators:[],       // {id, oppId, userId, permissions:[]}
-  nextIds:{opp:1,client:1,sh:1,interaction:1,rs:1,contract:1,actual:1,baseline:1,sector:10,stage:5,region:3,type:4,ct:6,pb:4,tr:6,il:4,sl:4,contact:1,appUser:2,role:5,collab:1,globalContact:1,oppSh:1,relType:9,engPurpose:9,risk:1,riskCat:20,clientCat:10}
+  nextIds:{opp:1,org:1,person:1,credential:1,affiliation:1,oppPerson:1,sh:1,interaction:1,rs:1,contract:1,actual:1,baseline:1,sector:10,stage:5,region:3,type:4,ct:6,pb:4,tr:6,il:4,sl:4,relType:9,engPurpose:9,risk:1,riskCat:20,clientCat:10}
 };
 const FULLSCREEN_PAGES=['opportunities','pipeline-full','lost','contracts','clients','forecast'];
 let currentOppId=null,currentOrgId=null,currentFYYear=null,oppScope='mine';
