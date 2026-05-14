@@ -1019,7 +1019,7 @@ async function sbUpdate(table, id, data) {
 }
 
 const DB_VERSION='5.0-xone';
-const APP_REVISION = 'r38';  // Increment this with each build
+const APP_REVISION = 'r39';  // Increment this with each build
 let DB={
   version:DB_VERSION,
   settings:{fyStart:7,escMonth:7,escRate:5,escDesc:'Revenue escalates every July by 5%'},
@@ -2542,12 +2542,25 @@ function renderRevGrid(oppId,fyYear){
   function dc(v,color){return `<td class="deal-tot-val">${fmt(v)}</td>`;}
   function oppCell(m,field){
     const rs=oppMap[m],val=rs?(rs[field]||0):0;
+    // Margin is always calculated from revenue × opportunity margin rate - never editable
+    if(field==='margin'){
+      const rev=oppMap[m]?(oppMap[m].revenue||0):0;
+      const marginRate=o.margin||0;
+      const calcMargin=Math.round(rev*marginRate);
+      return `<td class="readonly-cell" style="color:var(--text3);background:var(--bg2);" title="Calculated: revenue × ${Math.round(marginRate*100)}%">${calcMargin>0?fv(calcMargin):''}</td>`;
+    }
     if(secured)return `<td class="readonly-cell">${fv(val)||''}</td>`;
     const pastLocked = isPastMonth(m) && !can('edit_past_revenue');
     if(pastLocked) return `<td class="readonly-cell" title="Past month — special permission required">${fv(val)||''}</td>`;
     return `<td><input class="rev-cell ${val>0?'has-val':''}" value="${fv(val)}" placeholder="" onfocus="this.value=this.value.replace(/[^0-9]/g,'')" onblur="updateOppCell('${m}','${field}',this.value,this)" oninput="this.classList.toggle('has-val',this.value!='')"></td>`;
   }
   function conCell(m,field){
+    if(field==='margin'){
+      const rev=conMap[m]?(conMap[m].revenue||0):0;
+      const marginRate=o.margin||0;
+      const calcMargin=Math.round(rev*marginRate);
+      return `<td class="readonly-cell" style="color:var(--text3);background:var(--bg2);" title="Calculated">${calcMargin>0?fv(calcMargin):''}</td>`;
+    }
     const rs=conMap[m],val=rs?(rs[field]||0):0;
     if(!secured)return `<td class="readonly-cell"></td>`;
     const pastLocked = isPastMonth(m) && !can('edit_past_revenue');
@@ -2629,7 +2642,13 @@ function updateOppCell(month,field,rawVal,input){
 
   let rs=DB.opportunityStreams.find(r=>+r.oppId===+currentOppId&&r.month===month);
   if(!rs){rs={id:DB.nextIds.rs++,oppId:+currentOppId,month,revenue:0,margin:0};DB.opportunityStreams.push(rs);}
-  rs[field]=val;if(input){input.value=val>0?fmtNum(val):'';input.classList.toggle('has-val',val>0);}
+  rs[field]=val;
+  // Auto-calculate margin from revenue × opportunity margin rate
+  if(field==='revenue'){
+    const opp=DB.opportunities.find(op=>+op.id===+currentOppId);
+    rs.margin=Math.round(val*(opp?opp.margin||0:0));
+  }
+  if(input){input.value=val>0?fmtNum(val):'';input.classList.toggle('has-val',val>0);}
   sbSaveStream(rs);
   updateCommCalcs();
 }
