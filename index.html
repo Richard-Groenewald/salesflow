@@ -1019,7 +1019,7 @@ async function sbUpdate(table, id, data) {
 }
 
 const DB_VERSION='5.0-xone';
-const APP_REVISION = 'r50';  // Increment this with each build
+const APP_REVISION = 'r51';  // Increment this with each build
 let DB={
   version:DB_VERSION,
   settings:{fyStart:7,escMonth:7,escRate:5,escDesc:'Revenue escalates every July by 5%'},
@@ -2028,7 +2028,10 @@ function openOppForm(oppId){
   const marginInput = document.getElementById('otf-margin');
   if(marginInput) {
     const t0m = getType(o.typeId);
-    const marginPct = o.margin && o.margin > 0 ? Math.round(o.margin*1000)/10 : (t0m ? t0m.defaultMargin : 0);
+    // o.margin stored as decimal (0.25=25%) but may be stored as integer (25) in old data
+    let rawM = o.margin && o.margin > 0 ? o.margin : (t0m ? t0m.defaultMargin/100 : 0);
+    if(rawM > 1) rawM = rawM / 100; // already a percentage integer, convert to decimal
+    const marginPct = Math.round(rawM * 1000) / 10;
     marginInput.value = marginPct;
     const hintEl = document.getElementById('otf-margin-hint');
     if(hintEl && t0m) hintEl.textContent = 'default '+t0m.defaultMargin+'%'+(t0m.minMargin?' · min '+t0m.minMargin+'%':'');
