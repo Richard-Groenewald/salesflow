@@ -1019,7 +1019,7 @@ async function sbUpdate(table, id, data) {
 }
 
 const DB_VERSION='5.0-xone';
-const APP_REVISION = 'r41';  // Increment this with each build
+const APP_REVISION = 'r43';  // Increment this with each build
 let DB={
   version:DB_VERSION,
   settings:{fyStart:7,escMonth:7,escRate:5,escDesc:'Revenue escalates every July by 5%'},
@@ -1801,8 +1801,18 @@ function renderLkpSection(sec,forceOpen){
     }
     if(hasSub){
       const si=document.createElement('input');si.className='lkp-input';si.value=item.subCategory||'';si.placeholder='Sub Category';si.style.maxWidth='120px';si.onblur=function(){updateLkp(key,item.id,'subCategory',this.value);};ml.appendChild(si);
-      const mkSm=(lbl,field)=>{const sp=document.createElement('span');sp.textContent=lbl;sp.style.cssText='font-size:10px;color:var(--text3);white-space:nowrap;';const inp=document.createElement('input');inp.className='lkp-input-sm';inp.value=item[field]!==undefined?item[field]:0;inp.onblur=(function(f){return function(){updateLkp(key,item.id,f,this.value);};})(field);ml.appendChild(sp);ml.appendChild(inp);};
-      mkSm('M%','defaultMargin');mkSm('Mths','defaultDuration');
+      const mkSm=(lbl,field)=>{
+        const isMargin=field==='defaultMargin'||field==='minMargin';
+        const sp=document.createElement('span');sp.textContent=lbl;sp.style.cssText='font-size:10px;color:var(--text3);white-space:nowrap;';
+        const inp=document.createElement('input');inp.className='lkp-input-sm';
+        inp.value=item[field]!==undefined?item[field]:0;
+        if(isMargin)inp.style.color='rgb(0,106,193)';
+        inp.title=isMargin?'Percentage e.g. 25 for 25%':'';
+        inp.onblur=(function(f){return function(){updateLkp(key,item.id,f,this.value);};})(field);
+        ml.appendChild(sp);ml.appendChild(inp);
+        if(isMargin){const pct=document.createElement('span');pct.textContent='%';pct.style.cssText='font-size:10px;color:var(--text3);';ml.appendChild(pct);}
+      };
+      mkSm('M%','defaultMargin');mkSm('Min%','minMargin');mkSm('Mths','defaultDuration');
     }
     if(hasRec){
       const lbl=document.createElement('label');lbl.style.cssText='display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text2);white-space:nowrap;cursor:pointer;';
