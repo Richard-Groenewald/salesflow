@@ -972,7 +972,6 @@ textarea.form-control{resize:vertical;min-height:70px;}
   </div>
 </div>
 <script>
-console.log("SCRIPT START");
 
 // ═══════════════════════════════════════════════
 // DATABASE
@@ -1024,7 +1023,7 @@ async function sbUpdate(table, id, data) {
 }
 
 const DB_VERSION='5.0-xone';
-const APP_REVISION = 'r79';  // Increment this with each build
+const APP_REVISION = 'r81';  // Increment this with each build
 let DB={
   version:DB_VERSION,
   settings:{fyStart:7,escMonth:7,escRate:5,escDesc:'Revenue escalates every July by 5%'},
@@ -3248,7 +3247,6 @@ async function loadFromSupabase() {
   showLoadingOverlay('Loading data...');
   const safeFetch = async (tbl) => {
     try {
-      showLoadingOverlay('Loading: '+tbl+'...');
       const result = await Promise.race([
         sbFetch(tbl,'GET',null,'select=*'),
         new Promise(r=>setTimeout(()=>r([]),8000))
@@ -3316,6 +3314,7 @@ async function loadFromSupabase() {
   };
 
   // Load settings separately with timeout fallback
+  showLoadingOverlay('Finalising...');
   try {
     const settingsData = await Promise.race([
       sbFetch('settings','GET',null,'select=*'),
@@ -3345,7 +3344,6 @@ async function loadFromSupabase() {
   DB.nextIds.stage=maxId(DB.stages);
   DB.nextIds.region=maxId(DB.regions);
   DB.nextIds.type=maxId(DB.projectServiceTypes);
-  console.log('loadFromSupabase complete, people:',DB.people.length,'orgs:',DB.organisations.length);
 }
 
 async function startApp() {
@@ -3358,11 +3356,8 @@ async function startApp() {
         loadFromSupabase(),
         new Promise((_,reject)=>setTimeout(()=>reject(new Error('Load timeout after 30s')),30000))
       ]);
-      console.log('setDataSource called');
       setDataSource('supabase');
-      console.log('hideLoadingOverlay called');
       hideLoadingOverlay();
-      console.log('initAuth called');
       initAuth();
     } else {
       throw new Error('unavailable');
@@ -3381,7 +3376,6 @@ async function startApp() {
       </div>`;
   }
 }
-console.log("SCRIPT LOADED - calling startApp");
 startApp();
 </script>
 <!-- MODAL: NEW CONTACT -->
