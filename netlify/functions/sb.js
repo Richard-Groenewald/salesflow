@@ -2,7 +2,7 @@ const https=require('https');
 const SB='kevrfdjqyuhmgziqxuvs.supabase.co';
 exports.handler=async(event)=>{
   const KEY=process.env.SUPABASE_SECRET_KEY;
-  if(!KEY)return{statusCode:500,body:'Missing key'};
+  if(!KEY)return{statusCode:500,headers:{'Access-Control-Allow-Origin':'*'},body:'Missing SUPABASE_SECRET_KEY env var'};
   if(event.httpMethod==='OPTIONS')return{statusCode:200,headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Content-Type,Authorization,apikey,Prefer','Access-Control-Allow-Methods':'GET,POST,PATCH,DELETE,OPTIONS'},body:''};
   const path=event.path.replace('/.netlify/functions/sb','/rest/v1');
   const qs=event.rawQuery?'?'+event.rawQuery:'';
