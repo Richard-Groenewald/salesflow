@@ -45,7 +45,7 @@ body{font-family:Arial,sans-serif;background:var(--bg);color:var(--text);min-hei
 .sf-th{position:relative;cursor:pointer;user-select:none;padding-right:28px!important;}
 .sf-th:hover{background:var(--bg3)!important;}
 .sf-th-inner{display:flex;align-items:center;justify-content:space-between;gap:2px;overflow:hidden;width:100%;}
-.sf-th-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+.sf-th-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-size:10px;letter-spacing:0.04em;}
 .sf-th-icons{display:flex;flex-direction:column;gap:1px;align-items:center;flex-shrink:0;}
 .sf-sort-icon{font-size:8px;color:var(--text3);line-height:1;}
 .sf-sort-icon.active{color:var(--red);}
@@ -585,8 +585,9 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <div>
             <div class="opp-field-row">
               <span class="opp-field-label">Margin</span>
-              <input type="number" class="opp-input" id="otf-margin" style="width:80px;" onblur="onCommercialChange()">
-              <span style="font-size:12px;color:var(--text2);">%</span>
+              <div id="otf-margin-display" style="width:80px;padding:5px 8px;background:var(--bg3);border-radius:6px;font-size:13px;font-weight:600;color:var(--blue-mid);border:1px solid var(--border);">—</div>
+              <span style="font-size:12px;color:var(--text2);">% (from service type)</span>
+              <input type="hidden" id="otf-margin">
             </div>
             <div id="recurring-fields">
               <div class="opp-field-row">
@@ -1018,7 +1019,7 @@ async function sbUpdate(table, id, data) {
 }
 
 const DB_VERSION='5.0-xone';
-const APP_REVISION = 'r36';  // Increment this with each build
+const APP_REVISION = 'r37';  // Increment this with each build
 let DB={
   version:DB_VERSION,
   settings:{fyStart:7,escMonth:7,escRate:5,escDesc:'Revenue escalates every July by 5%'},
@@ -1970,7 +1971,7 @@ function openOppForm(oppId){
   document.getElementById('ohf-date').textContent=new Date().toLocaleDateString('en-ZA',{day:'2-digit',month:'short',year:'numeric'});
   // Product tab
   populateMajorCat(o.typeId);populateSubCat(o.typeId);updateRecBadge(o.typeId);
-  document.getElementById('otf-region').innerHTML='<option value="">—</option>'+DB.regions.map(r=>`<option value="${r.id}" ${+r.id===+o.regionId?'selected':''}>${r.region}</option>`).join('');
+  document.getElementById('otf-region').innerHTML='<option value="">—</option>'+DB.regions.map(r=>`<option value="${r.id}" ${+r.id===+o.regionId?'selected':''}>${r.value}</option>`).join('');
   document.getElementById('otf-desc').value=o.desc||'';
   // Commercial tab
   const ownerSel = document.getElementById('otf-owner');
@@ -2170,7 +2171,18 @@ function searchContacts(query){
   const res=document.getElementById('sh-search-results');
   if(!query||query.length<2){res.style.display='none';return;}
   const q=query.toLowerCase();
-  const matches=DB.contacts.filter(c=>
+
+  // Include client contacts from the current opportunity's client
+  const opp=DB.opportunities.find(op=>+op.id===+currentOppId);
+  const client=opp?DB.clients.find(cl=>+cl.id===+opp.clientId):null;
+  const clientContacts=(client&&client.contacts||[]).map((ct,i)=>({
+    id:'cc-'+i, first:ct.first, last:ct.last,
+    company:client.colloquial, title:ct.title,
+    email:ct.email, phone:ct.phone, isClientContact:true, clientContactIdx:i
+  }));
+
+  const allContacts=[...DB.contacts, ...clientContacts];
+  const matches=allContacts.filter(c=>
     (c.first||'').toLowerCase().includes(q)||
     (c.last||'').toLowerCase().includes(q)||
     ((c.first||'')+' '+(c.last||'')).toLowerCase().includes(q)
@@ -3098,22 +3110,48 @@ function switchClientTab(el,paneId){
   document.querySelectorAll('#client-form-page .opp-tab-pane').forEach(p=>p.classList.remove('active'));
   if(el)el.classList.add('active');const pane=document.getElementById(paneId);if(pane)pane.classList.add('active');
 }
-function renderClientContacts(clientId){
-  const c=DB.clients.find(cl=>+cl.id===+clientId);if(!c){return;}
-  if(!c.contacts)c.contacts=[];
-  document.getElementById('ct-contacts-count').textContent=c.contacts.length+' contact'+(c.contacts.length!==1?'s':'');
-  document.getElementById('ct-contacts-list').innerHTML=c.contacts.length?c.contacts.map((ct,idx)=>`<div class="contact-card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><span style="font-weight:600;font-size:13.5px;">${ct.firstName||''} ${ct.lastName||''}</span><button class="btn btn-danger btn-sm" onclick="removeContact(${idx})">Remove</button></div>
-    <div class="form-grid-2">
-      <div class="form-group"><label class="form-label">First Name</label><input class="form-control" value="${ct.firstName||''}" onblur="updateContact(${idx},'firstName',this.value)"></div>
-      <div class="form-group"><label class="form-label">Last Name</label><input class="form-control" value="${ct.lastName||''}" onblur="updateContact(${idx},'lastName',this.value)"></div>
-      <div class="form-group"><label class="form-label">Title / Role</label><input class="form-control" value="${ct.role||''}" placeholder="e.g. IT Director" onblur="updateContact(${idx},'role',this.value)"></div>
-      <div class="form-group"><label class="form-label">Email</label><input class="form-control" type="email" value="${ct.email||''}" onblur="updateContact(${idx},'email',this.value)"></div>
-      <div class="form-group"><label class="form-label">Phone</label><input class="form-control" value="${ct.phone||''}" onblur="updateContact(${idx},'phone',this.value)"></div>
-      <div class="form-group"><label class="form-label">Primary Contact</label><select class="form-control" onchange="updateContact(${idx},'primary',this.value==='true')"><option value="false" ${!ct.primary?'selected':''}>No</option><option value="true" ${ct.primary?'selected':''}>Yes</option></select></div>
+function renderClientContacts(){
+  const c=DB.clients.find(cl=>+cl.id===+currentClientId);
+  if(!c)return;
+  const contacts=c.contacts||[];
+  const container=document.getElementById('client-contacts-list');
+  if(!container)return;
+
+  if(!contacts.length){
+    container.innerHTML='<div style="padding:14px;color:var(--text3);font-size:13px;">No contacts yet. Click + Add Contact to add one.</div>';
+    return;
+  }
+
+  container.innerHTML=contacts.map((ct,i)=>`
+    <div class="contact-row" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="toggleContactExpand(${i})">
+      <div style="flex:1;">
+        <div style="font-weight:600;font-size:13px;color:var(--text);">${ct.first||''} ${ct.last||''}</div>
+        <div style="font-size:11.5px;color:var(--text2);margin-top:2px;">
+          ${ct.title?`<span>${ct.title}</span>`:''}
+          ${ct.phone?`<span style="margin-left:10px;">📞 ${ct.phone}</span>`:''}
+          ${ct.email?`<span style="margin-left:10px;">✉ ${ct.email}</span>`:''}
+        </div>
+      </div>
+      <button onclick="event.stopPropagation();removeContact(${i})" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;padding:4px;">&#215;</button>
     </div>
-  </div>`).join(''):'<div style="text-align:center;padding:24px;color:var(--text3);">No contacts yet.</div>';
+    <div id="contact-expand-${i}" style="display:none;background:var(--bg2);padding:12px 14px;border-bottom:1px solid var(--border);">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div class="form-group"><label class="form-label" style="font-size:11px;">First Name</label><input type="text" class="form-control" value="${ct.first||''}" onblur="updateContact(${i},'first',this.value)"></div>
+        <div class="form-group"><label class="form-label" style="font-size:11px;">Last Name</label><input type="text" class="form-control" value="${ct.last||''}" onblur="updateContact(${i},'last',this.value)"></div>
+        <div class="form-group"><label class="form-label" style="font-size:11px;">Title / Position</label><input type="text" class="form-control" value="${ct.title||''}" onblur="updateContact(${i},'title',this.value)"></div>
+        <div class="form-group"><label class="form-label" style="font-size:11px;">Phone</label><input type="text" class="form-control" value="${ct.phone||''}" onblur="updateContact(${i},'phone',this.value)"></div>
+        <div class="form-group" style="grid-column:1/-1;"><label class="form-label" style="font-size:11px;">Email</label><input type="email" class="form-control" value="${ct.email||''}" onblur="updateContact(${i},'email',this.value)"></div>
+      </div>
+    </div>
+  `).join('');
 }
+
+function toggleContactExpand(i){
+  const el=document.getElementById('contact-expand-'+i);
+  if(el)el.style.display=el.style.display==='none'?'block':'none';
+}
+
+
 function addClientContact(){
   const c=DB.clients.find(cl=>+cl.id===+currentClientId);if(!c)return;if(!c.contacts)c.contacts=[];
   if(!DB.nextIds.contact)DB.nextIds.contact=1;
