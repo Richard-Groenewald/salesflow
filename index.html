@@ -585,9 +585,9 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <div>
             <div class="opp-field-row">
               <span class="opp-field-label">Margin</span>
-              <div id="otf-margin-display" style="width:80px;padding:5px 8px;background:var(--bg3);border-radius:6px;font-size:13px;font-weight:600;color:var(--blue-mid);border:1px solid var(--border);">—</div>
-              <span style="font-size:12px;color:var(--text2);">% (from service type)</span>
-              <input type="hidden" id="otf-margin">
+              <input type="number" class="opp-input" id="otf-margin" style="width:72px;" step="0.1" min="0" max="100" onblur="onMarginChange(this.value)" onfocus="this.select()">
+              <span style="font-size:12px;color:var(--text2);">%</span>
+              <span id="otf-margin-hint" style="font-size:10.5px;color:var(--text3);white-space:nowrap;margin-left:4px;"></span>
             </div>
             <div id="recurring-fields">
               <div class="opp-field-row">
@@ -1019,7 +1019,7 @@ async function sbUpdate(table, id, data) {
 }
 
 const DB_VERSION='5.0-xone';
-const APP_REVISION = 'r44';  // Increment this with each build
+const APP_REVISION = 'r46';  // Increment this with each build
 let DB={
   version:DB_VERSION,
   settings:{fyStart:7,escMonth:7,escRate:5,escDesc:'Revenue escalates every July by 5%'},
@@ -1824,19 +1824,17 @@ function renderLkpSection(sec,forceOpen){
       const si=document.createElement('input');si.className='lkp-input';si.value=item.subCategory||'';si.placeholder='Sub Category';si.style.maxWidth='120px';si.onblur=function(){updateLkp(key,item.id,'subCategory',this.value);};ml.appendChild(si);
       const mkSm=(lbl,field)=>{
         const isMargin=field==='defaultMargin'||field==='minMargin';
-        const sp=document.createElement('span');sp.textContent=lbl;sp.style.cssText='font-size:10px;color:var(--text3);white-space:nowrap;';
         const inp=document.createElement('input');inp.className='lkp-input-sm';
-        // Margin fields: stored as decimal (0.25) but shown as % (25)
         const rawVal = item[field]!==undefined?item[field]:0;
-        inp.value = isMargin ? Math.round(rawVal*100*10)/10 : rawVal;
+        inp.value = isMargin ? Math.round(rawVal*100*10)/10 : (Number.isInteger(rawVal)?rawVal:Math.round(rawVal));
         if(isMargin)inp.style.color='rgb(0,106,193)';
-        inp.title=isMargin?'Enter as percentage e.g. 25 for 25%':'';
+        inp.title=isMargin?'Enter as percentage e.g. 25 for 25%':(field==='defaultDuration'?'Months':'');
         inp.onblur=(function(f,isM){return function(){
           const v=parseFloat(this.value)||0;
           updateLkp(key,item.id,f, isM ? v/100 : v);
         };})(field,isMargin);
-        ml.appendChild(sp);ml.appendChild(inp);
-        if(isMargin){const pct=document.createElement('span');pct.textContent='%';pct.style.cssText='font-size:10px;color:var(--text3);';ml.appendChild(pct);}
+        ml.appendChild(inp);
+        if(isMargin){const pct=document.createElement('span');pct.textContent='%';pct.style.cssText='font-size:10px;color:var(--text3);margin-right:4px;';ml.appendChild(pct);}
       };
       mkSm('M%','defaultMargin');mkSm('Min%','minMargin');mkSm('Mths','defaultDuration');
     }
