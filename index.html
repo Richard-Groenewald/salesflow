@@ -1026,7 +1026,7 @@ async function sbUpdate(table, id, data) {
 }
 
 const DB_VERSION='5.0-xone';
-const APP_REVISION = 'r97';  // Increment this with each build
+const APP_REVISION = 'r98';  // Increment this with each build
 let DB={
   version:DB_VERSION,
   settings:{fyStart:7,escMonth:7,escRate:5,escDesc:'Revenue escalates every July by 5%'},
@@ -1227,19 +1227,15 @@ function canOnDeal(oppId, permission) {
 // ═══════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════
-const parseCur=v=>Math.round(parseFloat(String(v).replace(/[^0-9.]/g,''))||0);
 const fmt=n=>'R '+fmtNum(n||0);
 const fmtM=n=>{const v=Math.round(n||0);return v>=1000000?'R '+(v/1000000).toFixed(1).replace(/\.0$/,'')+'M':v>=1000?'R '+Math.round(v/1000)+'K':'R '+fmtNum(v);};
-const getStage=id=>DB.stages.find(s=>+s.id===+id)||{};
 const getClient=id=>DB.organisations.find(c=>+c.id===+id)||{};
 const getOwner=id=>DB.people.filter(p=>p.isXone).find(o=>+o.id===+id)||{};
 const getRegion=id=>DB.regions.find(r=>+r.id===+id)||{};
-const getType=id=>DB.projectServiceTypes.find(t=>+t.id===+id)||{};
 const isSecured=o=>getStage(o.stageId).stage==='Secured';
 const getOppStreams=id=>DB.opportunityStreams.filter(r=>+r.oppId===+id);
 const getConStreams=id=>DB.contractStreams.filter(r=>+r.oppId===+id);
 const getActStreams=id=>{const cIds=DB.contracts.filter(c=>+c.oppId===+id).map(c=>+c.id);return DB.actualStreams.filter(a=>+a.oppId===+id||cIds.includes(+a.contractId));};
-const getTCV=o=>{if(isSecured(o)){const c=getConStreams(o.id).reduce((s,r)=>s+(r.revenue||0),0);if(c>0)return c;}return getOppStreams(o.id).reduce((s,r)=>s+(r.revenue||0),0);};
 const getWeighted=o=>getTCV(o)*(o.probability||0)/100;
 const MONTHS_S=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const MONTHS_F=['January','February','March','April','May','June','July','August','September','October','November','December'];
