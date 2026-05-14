@@ -1022,7 +1022,7 @@ async function sbUpdate(table, id, data) {
 }
 
 const DB_VERSION='5.0-xone';
-const APP_REVISION = 'r68';  // Increment this with each build
+const APP_REVISION = 'r69';  // Increment this with each build
 let DB={
   version:DB_VERSION,
   settings:{fyStart:7,escMonth:7,escRate:5,escDesc:'Revenue escalates every July by 5%'},
@@ -3243,7 +3243,7 @@ function lkpToSb(key, item) {
 }
 
 async function loadFromSupabase() {
-  const tables1 = ['organisations','people','person_affiliations','user_credentials','opportunities','opportunity_streams','contract_streams','actual_streams','opportunity_people','interactions','risks','contracts','user_permission_overrides','settings'];
+  const tables1 = ['organisations','people','person_affiliations','user_credentials','opportunities','opportunity_streams','contract_streams','actual_streams','opportunity_people','interactions','risks','contracts','user_permission_overrides'];
   const tables2 = [];
   const allTables = [...tables1, ...tables2];
   const results = {};
@@ -3251,7 +3251,7 @@ async function loadFromSupabase() {
     showLoadingOverlay('Loading: '+tbl+'...');
     results[tbl] = await sbFetch(tbl,'GET',null,'select=*');
   }
-  const [orgs, people, personAffils, userCreds, opps, streams, conStreams, actStreams, oppPeople, interactions, risks, contracts, permOverrides, settings] = tables1.map(t=>results[t]);
+  const [orgs, people, personAffils, userCreds, opps, streams, conStreams, actStreams, oppPeople, interactions, risks, contracts, permOverrides] = tables1.map(t=>results[t]);
   const stages=null, regions=null;
 
   DB.organisations = (orgs||[]).map(r=>({id:r.id,name:r.name,legalName:r.legal_name,type:r.type||'client',industrySectorId:r.industry_sector_id,categoryIds:r.category_ids||[],notes:r.notes,createdDate:r.created_date}));
@@ -3302,12 +3302,19 @@ async function loadFromSupabase() {
     4:['view_all_deals','view_clients','view_dashboard','view_reports','view_all_financials']
   };
 
-  if(settings&&settings.length) {
-    const appS=settings.find(s=>s.key==='app_settings');
-    if(appS&&appS.value) try{Object.assign(DB.settings,JSON.parse(appS.value));}catch(e){}
-    const devN=settings.find(s=>s.key==='dev_notes');
-    if(devN&&devN.value) try{devNotesData=JSON.parse(devN.value);}catch(e){}
-  }
+  // Load settings separately with timeout fallback
+  try {
+    const settingsData = await Promise.race([
+      sbFetch('settings','GET',null,'select=*'),
+      new Promise(r=>setTimeout(()=>r([]),5000))
+    ]);
+    if(settingsData&&settingsData.length) {
+      const appS=settingsData.find(s=>s.key==='app_settings');
+      if(appS&&appS.value) try{Object.assign(DB.settings,JSON.parse(appS.value));}catch(e){}
+      const devN=settingsData.find(s=>s.key==='dev_notes');
+      if(devN&&devN.value) try{devNotesData=JSON.parse(devN.value);}catch(e){}
+    }
+  } catch(e) { console.warn('Settings load failed, using defaults'); }
 
   const maxId=arr=>arr&&arr.length?Math.max(...arr.map(i=>+i.id||0))+1:1;
   DB.nextIds.org=maxId(DB.organisations);
