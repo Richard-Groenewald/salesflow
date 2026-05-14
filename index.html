@@ -585,7 +585,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <div>
             <div class="opp-field-row">
               <span class="opp-field-label">Margin</span>
-              <input type="number" class="opp-input" id="otf-margin" style="width:72px;" step="0.1" min="0" max="100" onblur="onMarginChange(this.value)" onfocus="this.select()">
+              <input type="number" class="opp-input" id="otf-margin" style="width:72px;" step="1" min="0" max="100" onblur="onMarginChange(this.value)" onfocus="this.select()">
               <span style="font-size:12px;color:var(--text2);">%</span>
               <span id="otf-margin-hint" style="font-size:10.5px;color:var(--text3);white-space:nowrap;margin-left:4px;"></span>
             </div>
@@ -1019,7 +1019,7 @@ async function sbUpdate(table, id, data) {
 }
 
 const DB_VERSION='5.0-xone';
-const APP_REVISION = 'r53';  // Increment this with each build
+const APP_REVISION = 'r54';  // Increment this with each build
 let DB={
   version:DB_VERSION,
   settings:{fyStart:7,escMonth:7,escRate:5,escDesc:'Revenue escalates every July by 5%'},
@@ -2029,9 +2029,9 @@ function openOppForm(oppId){
   if(marginInput) {
     const t0m = getType(o.typeId);
     // o.margin stored as decimal (0.25=25%) but may be stored as integer (25) in old data
-    // o.margin is decimal (0.25), convert to % (25)
+    // o.margin is decimal (0.25), show as integer % (25)
     const rawM = o.margin && o.margin > 0 ? o.margin : (t0m ? (t0m.defaultMargin>1?t0m.defaultMargin/100:t0m.defaultMargin) : 0);
-    const marginPct = rawM > 1 ? rawM : Math.round(rawM * 100);
+    const marginPct = Math.round(rawM > 1 ? rawM : rawM * 100);
     marginInput.value = marginPct;
     const hintEl = document.getElementById('otf-margin-hint');
     if(hintEl && t0m) {
@@ -2187,12 +2187,17 @@ function onMajorCatChange(major){
 function onMarginChange(val) {
   const o = DB.opportunities.find(op=>+op.id===+currentOppId); if(!o) return;
   const t = getType(o.typeId);
-  const minM = t ? (t.minMargin>1?t.minMargin:Math.round((t.minMargin||0)*100)) : 0;
-  const defM = t ? (t.defaultMargin>1?t.defaultMargin:Math.round((t.defaultMargin||0)*100)) : 0;
-  let pct = parseFloat(val);
-  if(isNaN(pct) || val === '') { pct = defM; document.getElementById('otf-margin').value = pct; }
-  if(pct < minM) { pct = minM; document.getElementById('otf-margin').value = pct; showToast('Margin cannot be below minimum of ' + minM + '%'); }
-  if(pct > 100) { pct = 100; document.getElementById('otf-margin').value = pct; }
+  // minMargin and defaultMargin from Supabase are decimals (0.15, 0.25)
+  const minM = t ? Math.round((t.minMargin||0)*100) : 0;
+  const defM = t ? Math.round((t.defaultMargin||0)*100) : 0;
+  let pct = Math.round(parseFloat(val));
+  if(isNaN(pct) || val === '') { pct = defM; }
+  if(pct < minM) {
+    pct = minM;
+    showToast('Margin cannot be below minimum of ' + minM + '% for this service type');
+  }
+  if(pct > 100) pct = 100;
+  document.getElementById('otf-margin').value = pct;
   o.margin = pct / 100;
   sbSaveOpp(o);
   updateCommCalcs();
