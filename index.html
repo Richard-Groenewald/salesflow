@@ -1019,7 +1019,7 @@ async function sbUpdate(table, id, data) {
 }
 
 const DB_VERSION='5.0-xone';
-const APP_REVISION = 'r51';  // Increment this with each build
+const APP_REVISION = 'r53';  // Increment this with each build
 let DB={
   version:DB_VERSION,
   settings:{fyStart:7,escMonth:7,escRate:5,escDesc:'Revenue escalates every July by 5%'},
@@ -2029,12 +2029,16 @@ function openOppForm(oppId){
   if(marginInput) {
     const t0m = getType(o.typeId);
     // o.margin stored as decimal (0.25=25%) but may be stored as integer (25) in old data
-    let rawM = o.margin && o.margin > 0 ? o.margin : (t0m ? t0m.defaultMargin/100 : 0);
-    if(rawM > 1) rawM = rawM / 100; // already a percentage integer, convert to decimal
-    const marginPct = Math.round(rawM * 1000) / 10;
+    // o.margin is decimal (0.25), convert to % (25)
+    const rawM = o.margin && o.margin > 0 ? o.margin : (t0m ? (t0m.defaultMargin>1?t0m.defaultMargin/100:t0m.defaultMargin) : 0);
+    const marginPct = rawM > 1 ? rawM : Math.round(rawM * 100);
     marginInput.value = marginPct;
     const hintEl = document.getElementById('otf-margin-hint');
-    if(hintEl && t0m) hintEl.textContent = 'default '+t0m.defaultMargin+'%'+(t0m.minMargin?' · min '+t0m.minMargin+'%':'');
+    if(hintEl && t0m) {
+      const defPct = t0m.defaultMargin > 1 ? t0m.defaultMargin : Math.round(t0m.defaultMargin*100);
+      const minPct = t0m.minMargin > 0 ? (t0m.minMargin > 1 ? t0m.minMargin : Math.round(t0m.minMargin*100)) : 0;
+      hintEl.textContent = 'default '+defPct+'%'+(minPct?' · min '+minPct+'%':'');
+    }
   }
   document.getElementById('otf-base').value=o.base?fmtNum(o.base):'';
   document.getElementById('otf-months').value=o.months||'';
@@ -2183,8 +2187,8 @@ function onMajorCatChange(major){
 function onMarginChange(val) {
   const o = DB.opportunities.find(op=>+op.id===+currentOppId); if(!o) return;
   const t = getType(o.typeId);
-  const minM = t ? (t.minMargin||0) : 0;
-  const defM = t ? (t.defaultMargin||0) : 0;
+  const minM = t ? (t.minMargin>1?t.minMargin:Math.round((t.minMargin||0)*100)) : 0;
+  const defM = t ? (t.defaultMargin>1?t.defaultMargin:Math.round((t.defaultMargin||0)*100)) : 0;
   let pct = parseFloat(val);
   if(isNaN(pct) || val === '') { pct = defM; document.getElementById('otf-margin').value = pct; }
   if(pct < minM) { pct = minM; document.getElementById('otf-margin').value = pct; showToast('Margin cannot be below minimum of ' + minM + '%'); }
@@ -2199,11 +2203,15 @@ function onTypeChange(typeId){
   // Set margin to type default (shown as %, stored as decimal)
   const me=document.getElementById('otf-margin');
   if(me&&t&&t.defaultMargin!==undefined){
-    me.value=t.defaultMargin;
+    me.value=t.defaultMargin>1?t.defaultMargin:Math.round(t.defaultMargin*100);
     saveOppField('margin',t.defaultMargin/100);
   }
   const hintEl2=document.getElementById('otf-margin-hint');
-  if(hintEl2&&t) hintEl2.textContent='default '+t.defaultMargin+'%'+(t.minMargin?' · min '+t.minMargin+'%':'');
+  if(hintEl2&&t) {
+    const dp=t.defaultMargin>1?t.defaultMargin:Math.round(t.defaultMargin*100);
+    const mp=t.minMargin>0?(t.minMargin>1?t.minMargin:Math.round(t.minMargin*100)):0;
+    hintEl2.textContent='default '+dp+'%'+(mp?' · min '+mp+'%':'');
+  }
   saveOppField('typeId',typeId);
   updateRecBadge(typeId);
   applyTypeDefaults(typeId);
@@ -2228,7 +2236,7 @@ function updateRecurringUI(typeId){
 }
 function applyTypeDefaults(typeId){
   const t=getType(typeId);
-  const me=document.getElementById('otf-margin');if(me&&t.defaultMargin!==undefined){me.value=t.defaultMargin;saveOppField('margin',t.defaultMargin);}
+  const me=document.getElementById('otf-margin');if(me&&t.defaultMargin!==undefined){const dp=t.defaultMargin>1?t.defaultMargin:Math.round(t.defaultMargin*100);me.value=dp;saveOppField('margin',t.defaultMargin>1?t.defaultMargin/100:t.defaultMargin);}
   if(t.recurring&&t.defaultDuration!==undefined){const mo=document.getElementById('otf-months');if(mo&&!parseInt(mo.value)){mo.value=t.defaultDuration;saveOppField('months',t.defaultDuration);}}
   updateCommCalcs();
 }
