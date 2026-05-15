@@ -1026,7 +1026,7 @@ async function sbUpdate(table, id, data) {
 }
 
 const DB_VERSION='5.0-xone';
-const APP_REVISION = 'r116';  // Increment this with each build
+const APP_REVISION = 'r117';  // Increment this with each build
 let DB={
   version:DB_VERSION,
   settings:{fyStart:7,escMonth:7,escRate:5,escDesc:'Revenue escalates every July by 5%'},
@@ -2868,7 +2868,9 @@ function showLogin() {
   // logo is inline SVG, no copy needed
 }
 function showApp() {
-  // Always refresh permissions on app show
+  // Always ensure loading overlay is hidden
+  const lo = document.getElementById('loading-overlay');
+  if(lo) lo.style.display = 'none';
   refreshCurrentUserPerms();
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('first-run-screen').style.display = 'none';
@@ -3373,13 +3375,9 @@ async function loadFromSupabase() {
     4:['view_all_deals','view_clients','view_dashboard','view_reports','view_all_financials']
   };
 
-  // Load settings separately with timeout fallback
-  showLoadingOverlay('Finalising...');
+  // Load settings - fire and forget, don't block
+  sbFetch('settings','GET',null,'select=*').then(settingsData=>{
   try {
-    const settingsData = await Promise.race([
-      sbFetch('settings','GET',null,'select=*'),
-      new Promise(r=>setTimeout(()=>r([]),5000))
-    ]);
     if(settingsData&&settingsData.length) {
       const appS=settingsData.find(s=>s.key==='app_settings');
       if(appS&&appS.value) try{Object.assign(DB.settings,JSON.parse(appS.value));}catch(e){}
@@ -3387,6 +3385,7 @@ async function loadFromSupabase() {
       if(devN&&devN.value) try{devNotesData=JSON.parse(devN.value);}catch(e){}
     }
   } catch(e) { console.warn('Settings load failed, using defaults'); }
+  }).catch(()=>{});
 
   const maxId=arr=>arr&&arr.length?Math.max(...arr.map(i=>+i.id||0))+1:1;
   DB.nextIds.org=maxId(DB.organisations);
@@ -3418,6 +3417,8 @@ async function startApp() {
       ]);
       setDataSource('supabase');
       hideLoadingOverlay();
+      // Safety net - ensure overlay is always hidden
+      document.getElementById('loading-overlay').style.display = 'none';
       initAuth();
     } else {
       throw new Error('unavailable');
