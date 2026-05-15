@@ -1026,7 +1026,7 @@ async function sbUpdate(table, id, data) {
 }
 
 const DB_VERSION='5.0-xone';
-const APP_REVISION = 'r104';  // Increment this with each build
+const APP_REVISION = 'r105';  // Increment this with each build
 let DB={
   version:DB_VERSION,
   settings:{fyStart:7,escMonth:7,escRate:5,escDesc:'Revenue escalates every July by 5%'},
@@ -2916,7 +2916,9 @@ function applyNavPermissions() {
 // USER MANAGEMENT
 // ═══════════════════════════════════════════════
 function renderUsersTable() {
-  if (!can('manage_users')) { showPage('dashboard'); return; }
+  // Allow admin (roleId 1) even if permissions not yet resolved
+  const isAdmin = (currentUser?.roleIds||[]).includes(1) || (currentUser?.resolvedPermissions||[]).includes('manage_users');
+  if (!isAdmin) { showPage('dashboard'); return; }
   const appPeople = DB.people.filter(p => DB.userCredentials.some(c => +c.personId === +p.id));
   const subEl = document.getElementById('users-sub');
   if(subEl) subEl.textContent = appPeople.length + ' users';
