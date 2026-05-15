@@ -1026,7 +1026,7 @@ async function sbUpdate(table, id, data) {
 }
 
 const DB_VERSION='5.0-xone';
-const APP_REVISION = 'r99';  // Increment this with each build
+const APP_REVISION = 'r100';  // Increment this with each build
 let DB={
   version:DB_VERSION,
   settings:{fyStart:7,escMonth:7,escRate:5,escDesc:'Revenue escalates every July by 5%'},
@@ -2847,6 +2847,8 @@ function showLogin() {
   // logo is inline SVG, no copy needed
 }
 function showApp() {
+  // Always refresh permissions on app show
+  refreshCurrentUserPerms();
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('first-run-screen').style.display = 'none';
   document.body.classList.remove('sidebar-hidden');
@@ -2855,13 +2857,14 @@ function showApp() {
   // Update sidebar user info
   const nameEl = document.getElementById('sidebar-user');
   const roleEl = document.getElementById('sidebar-role');
-  if (nameEl) nameEl.textContent = currentUser.name || currentUser.email;
+  if (nameEl) nameEl.textContent = currentUser.name || currentUser.email || '';
   if (roleEl) {
-    const roleNames = (currentUser.roleIds||[]).map(rid => DB.roles.find(r=>r.id===rid)?.name).filter(Boolean);
-    roleEl.textContent = roleNames.join(', ') || 'No role assigned';
+    const cred = DB.userCredentials.find(c=>+c.personId===+currentUser.id);
+    const roleIds = cred ? (cred.roleIds||[]) : (currentUser.roleIds||[]);
+    const roleNames = roleIds.map(rid => DB.roles.find(r=>+r.id===+rid)?.name).filter(Boolean);
+    roleEl.textContent = roleNames.join(', ') || 'Admin';
   }
-  applyNavPermissions();
-  // Update revision display
+  if(typeof applyNavPermissions==='function') applyNavPermissions();
   const revEl = document.getElementById('sidebar-revision');
   if(revEl) revEl.textContent = APP_REVISION;
   renderDashboard();
