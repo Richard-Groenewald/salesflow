@@ -1026,7 +1026,7 @@ async function sbUpdate(table, id, data) {
 }
 
 const DB_VERSION='5.0-xone';
-const APP_REVISION = 'r101';  // Increment this with each build
+const APP_REVISION = 'r102';  // Increment this with each build
 let DB={
   version:DB_VERSION,
   settings:{fyStart:7,escMonth:7,escRate:5,escDesc:'Revenue escalates every July by 5%'},
@@ -2875,12 +2875,20 @@ function doLogin() {
   const errEl = document.getElementById('login-error');
   errEl.style.display = 'none';
   if (!email || !password) { errEl.textContent = 'Please enter your email and password.'; errEl.style.display = 'block'; return; }
-  // Find user - show count to help debug
-  if (DB.people.length === 0) { errEl.textContent = 'No users in database. Use "First time setup" link below.'; errEl.style.display = 'block'; return; }
-  const user = DB.people.find(u => (u.name.toLowerCase() === email || u.email.toLowerCase() === email) && u.active !== false);
-  if (!user) { errEl.textContent = 'No account found for "' + email + '".'; errEl.style.display = 'block'; return; }
-  if (user.password !== password) { errEl.textContent = 'Incorrect password.'; errEl.style.display = 'block'; return; }
-  currentUser = {...user};
+  if (DB.userCredentials.length === 0) { errEl.textContent = 'No users in database. Use "First time setup" link below.'; errEl.style.display = 'block'; return; }
+  // Find person by email
+  const person = DB.people.find(p => (p.email||'').toLowerCase() === email);
+  if (!person) { errEl.textContent = 'No account found for "' + email + '".'; errEl.style.display = 'block'; return; }
+  // Find credentials
+  const cred = DB.userCredentials.find(c => +c.personId === +person.id);
+  if (!cred || cred.active === false) { errEl.textContent = 'Account is inactive.'; errEl.style.display = 'block'; return; }
+  if (cred.password !== password) { errEl.textContent = 'Incorrect password.'; errEl.style.display = 'block'; return; }
+  currentUser = {
+    id: person.id, personId: person.id,
+    name: personName(person), email: person.email,
+    roleIds: cred.roleIds||[3], isXone: person.isXone,
+    initials: personInitials(person)
+  };
   currentUser.resolvedPermissions = resolvePermissions(currentUser);
   sessionStorage.setItem('sf_user', JSON.stringify(currentUser));
   document.getElementById('login-password').value = '';
