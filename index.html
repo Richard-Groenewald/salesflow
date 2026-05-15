@@ -1026,7 +1026,7 @@ async function sbUpdate(table, id, data) {
 }
 
 const DB_VERSION='5.0-xone';
-const APP_REVISION = 'r108';  // Increment this with each build
+const APP_REVISION = 'r109';  // Increment this with each build
 let DB={
   version:DB_VERSION,
   settings:{fyStart:7,escMonth:7,escRate:5,escDesc:'Revenue escalates every July by 5%'},
@@ -2867,7 +2867,7 @@ function showApp() {
     const roleNames = roleIds.map(rid => DB.roles.find(r=>+r.id===+rid)?.name).filter(Boolean);
     roleEl.textContent = roleNames.join(', ') || 'Admin';
   }
-  if(typeof applyNavPermissions==='function') applyNavPermissions();
+  try { applyNavPermissions(); } catch(e) { console.error('applyNavPermissions error:', e); }
   const revEl = document.getElementById('sidebar-revision');
   if(revEl) revEl.textContent = APP_REVISION;
   renderDashboard();
@@ -2904,14 +2904,18 @@ function doLogout() {
   document.getElementById('login-email').value = '';
 }
 function applyNavPermissions() {
-  const isAdmin = (currentUser?.roleIds||[]).includes(1);
-  const navUsers = document.getElementById('nav-users');
-  console.log('applyNav: isAdmin=',isAdmin,'can=',can('manage_users'),'navUsers=',!!navUsers);
-  if (navUsers) navUsers.style.display = (isAdmin || can('manage_users')) ? '' : 'none';
-  document.querySelectorAll('.nav-item').forEach(n => {
-    const onclick = n.getAttribute('onclick') || '';
-    if (onclick.includes("'settings'")) n.style.display = (isAdmin || can('manage_settings')) ? '' : 'none';
-  });
+  try {
+    const isAdmin = !!(currentUser?.roleIds||[]).find(r=>r===1||r==='1');
+    const hasManageUsers = isAdmin || (currentUser?.resolvedPermissions||[]).includes('manage_users');
+    const hasManageSettings = isAdmin || (currentUser?.resolvedPermissions||[]).includes('manage_settings');
+    console.log('applyNav: isAdmin=',isAdmin,'hasManageUsers=',hasManageUsers,'currentUser.roleIds=',currentUser?.roleIds);
+    const navUsers = document.getElementById('nav-users');
+    if (navUsers) navUsers.style.display = hasManageUsers ? '' : 'none';
+    document.querySelectorAll('.nav-item').forEach(n => {
+      const onclick = n.getAttribute('onclick') || '';
+      if (onclick.includes("'settings'")) n.style.display = hasManageSettings ? '' : 'none';
+    });
+  } catch(e) { console.error('applyNavPermissions inner error:', e); }
 }
 
 // ═══════════════════════════════════════════════
