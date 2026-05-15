@@ -334,7 +334,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
     </div>
     <div class="stats-grid" id="dash-stats"></div>
     <div class="grid-2">
-      <div class="card">
+      <div class="card" id="dash-recent-card">
         <div class="card-header"><span class="card-title">Revenue Forecast (12 months)</span></div>
         <div class="card-body"><div style="height:160px;display:flex;align-items:flex-end;gap:4px;" id="dash-chart"></div></div>
       </div>
@@ -345,7 +345,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
     </div>
     <div class="card mt-16">
       <div class="card-header"><span class="card-title">Recent Opportunities</span><button class="btn btn-ghost btn-sm" onclick="showPage('opportunities')">View all</button></div>
-      <div class="table-wrap"><table id="dash-recent"></table></div>
+      <div class="table-wrap"><table id="dash-recent"></div>
     </div>
   </div>
 
@@ -369,7 +369,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
     </div>
     <div class="card">
       <div class="card-header"><span class="card-title">Opportunity Revenue Streams</span></div>
-      <div class="table-wrap"><table id="forecast-table"></table></div>
+      <div class="table-wrap"><table id="forecast-table" class="sf-table" style="width:100%;font-size:12px;"><thead id="forecast-thead"></thead><tbody id="forecast-tbody"></tbody></table></div>
     </div>
   </div>
 
@@ -396,7 +396,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <button class="btn btn-primary" onclick="showNewOppModal()">+ New</button>
       </div>
     </div>
-    <div class="card" style="overflow:visible;"><div style="overflow:visible;"><table id="opp-table" style="table-layout:fixed;width:100%;"></table></div></div>
+    <div class="card" style="overflow:visible;"><div style="overflow:visible;"><table id="opp-table" class="sf-table" style="table-layout:fixed;width:100%;"><thead><tr><th>Name</th><th>Organisation</th><th>Stage</th><th style="text-align:right">Value</th><th>Owner</th></tr></thead><tbody id="opps-table-body"></tbody></table></div></div>
   </div>
 
   <!-- FULL PIPELINE -->
@@ -417,7 +417,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         </div>
       </div>
     </div>
-    <div class="card"><div class="table-wrap"><table id="fp-table"></table></div></div>
+    <div class="card"><div class="table-wrap"><table id="fp-table"></div></div>
   </div>
 
   <!-- LOST -->
@@ -438,7 +438,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         </div>
       </div>
     </div>
-    <div class="card"><div class="table-wrap"><table id="lost-table"></table></div></div>
+    <div class="card"><div class="table-wrap"><table id="lost-table" class="sf-table" style="width:100%"><thead><tr><th>Name</th><th>Organisation</th><th>Stage</th><th style="text-align:right">Value</th><th>Owner</th></tr></thead><tbody id="lost-table-body"></tbody>></table></div></div>
   </div>
 
   <!-- CONTRACTS -->
@@ -447,7 +447,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div><button class="back-btn" onclick="goHome()">&#8592; Menu</button><div class="page-title">Contracts</div><div class="page-sub">Created automatically when an opportunity is Secured</div></div>
       <div class="search-wrap"><span class="search-icon">&#8981;</span><input type="text" placeholder="Search contracts..." id="contracts-search" oninput="renderContractsTable()" style="width:220px;"></div>
     </div>
-    <div class="card"><div class="table-wrap"><table id="contracts-table"></table></div></div>
+    <div class="card"><div class="table-wrap"><table id="contracts-table" class="sf-table" style="width:100%"><thead><tr><th>Name</th><th>Organisation</th><th>Start</th><th>End</th><th style="text-align:right">Value</th></tr></thead><tbody id="contracts-table-body"></tbody>></div></div>
   </div>
 
   <!-- CLIENTS -->
@@ -456,7 +456,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div><button class="back-btn" onclick="goHome()">&#8592; Menu</button><div class="page-title">Clients</div></div>
       <button class="btn btn-primary" onclick="openNewClientModal()">+ New Client</button>
     </div>
-    <div class="card"><div class="table-wrap"><table id="clients-table"></table></div></div>
+    <div class="card"><div class="table-wrap"><table id="clients-table" class="sf-table" style="width:100%"><thead><tr><th>Name</th><th>Legal Name</th><th>Type</th><th>Opps</th></tr></thead><tbody id="clients-table-body"></tbody></table></div></div>
   </div>
 
   <!-- USER MANAGEMENT -->
@@ -792,7 +792,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <button id="lock-btn" class="btn btn-primary btn-sm" style="display:none;">&#128203; Create Contract</button>
       </div>
     </div>
-    <div class="rev-grid-wrap"><table class="rev-grid" id="rev-grid"></table></div>
+    <div class="rev-grid-wrap"><table class="rev-grid" id="rev-grid"></div>
   </div>
 </div>
 
@@ -889,7 +889,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <span style="font-size:11.5px;font-weight:700;color:#e8f0f8;">Linked Opportunities</span>
       <span style="font-size:10.5px;color:#5a7a9a;" id="client-opp-count"></span>
     </div>
-    <table class="client-opp-tbl" id="client-opp-tbl"></table>
+    <table class="client-opp-tbl" id="client-opp-tbl">
   </div>
 </div>
 
@@ -1026,7 +1026,7 @@ async function sbUpdate(table, id, data) {
 }
 
 const DB_VERSION='5.0-xone';
-const APP_REVISION = 'r113';  // Increment this with each build
+const APP_REVISION = 'r116';  // Increment this with each build
 let DB={
   version:DB_VERSION,
   settings:{fyStart:7,escMonth:7,escRate:5,escDesc:'Revenue escalates every July by 5%'},
@@ -1157,13 +1157,23 @@ function goHome(){showPage('dashboard');}
 function openEditUser(personId){
   const p=DB.people.find(x=>+x.id===+personId);if(!p)return;
   const cred=DB.userCredentials.find(c=>+c.personId===+personId)||{};
+  document.getElementById('new-user-title').textContent='Edit User';
   document.getElementById('edit-user-id').value=personId;
   document.getElementById('nu-name').value=personName(p);
   document.getElementById('nu-email').value=p.email||'';
   document.getElementById('nu-password').value='';
-  if(document.getElementById('nu-is-xone'))document.getElementById('nu-is-xone').checked=p.isXone||false;
-  document.getElementById('nu-role').value=(cred.roleIds||[3])[0]||3;
-  document.getElementById('modal-new-user').style.display='flex';
+  document.getElementById('nu-password').placeholder='Leave blank to keep current';
+  if(document.getElementById('nu-initials')) document.getElementById('nu-initials').value=p.initials||'';
+  if(document.getElementById('nu-is-owner')) document.getElementById('nu-is-owner').checked=p.isXone||false;
+  if(document.getElementById('nu-active')) document.getElementById('nu-active').checked=cred.active!==false;
+  // Populate roles checkboxes
+  const rolesEl=document.getElementById('nu-roles');
+  if(rolesEl){
+    rolesEl.innerHTML=DB.roles.map(r=>`<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:6px 11px;"><input type="checkbox" data-role-id="${r.id}" ${(cred.roleIds||[]).includes(r.id)?'checked':''} style="accent-color:var(--red);width:14px;height:14px;"><div><div style="font-weight:600;">${r.name}</div></div></label>`).join('');
+  }
+  renderPermissionOverrides(DB.userPermissionOverrides.filter(o=>+o.personId===+personId));
+  openModal('modal-new-user');
+  setTimeout(()=>document.getElementById('nu-name').focus(),100);
 }
 
 function saveSettings(){
@@ -1190,6 +1200,17 @@ function toggleMS(){
 }
 
 function showNewOppModal(){openModal('modal-new-opp');}
+
+function openNewOpp() { showNewOppModal(); }
+
+function debouncedOppSearch() {
+  clearTimeout(window._oppSearchTimer);
+  window._oppSearchTimer = setTimeout(renderOppsTable, 300);
+}
+
+function openNewClientModal() {
+  openModal('modal-new-client');
+}
 function openModal(id){const el=document.getElementById(id);if(el)el.style.display='flex';}
 
 function resolvePermissions(user) {
@@ -3446,57 +3467,56 @@ function showPage(page) {
 
 function renderDashboard() {
   try {
-    const now = new Date();
     const months = getFYMonths();
-    // Revenue forecast
-    const fcRevEl = document.getElementById('dash-fc-rev');
-    const fcGpEl = document.getElementById('dash-fc-gp');
-    if(fcRevEl){
-      const totalRev = DB.opportunityStreams
-        .filter(s=>months.includes(s.month))
-        .reduce((a,s)=>a+(+s.revenue||0),0);
-      const totalGP = DB.opportunityStreams
-        .filter(s=>months.includes(s.month))
-        .reduce((a,s)=>a+(+s.revenue||0)*(+s.margin||0),0);
-      fcRevEl.textContent = 'R '+fmtNum(totalRev);
-      if(fcGpEl) fcGpEl.textContent = 'R '+fmtNum(totalGP);
-    }
-    // Pipeline by stage
-    const stageEls = document.querySelectorAll('[data-stage-count]');
-    stageEls.forEach(el=>{
-      const stageId = +el.dataset.stageCount;
-      const count = DB.opportunities.filter(o=>+o.stageId===stageId).length;
-      el.textContent = count;
-    });
+    const activeOpps = DB.opportunities.filter(o=>getStage(o.stageId).stage!=='Lost');
+    const totalRev = DB.opportunityStreams.filter(s=>months.includes(s.month)).reduce((a,s)=>a+(+s.revenue||0),0);
+    const totalGP = DB.opportunityStreams.filter(s=>months.includes(s.month)).reduce((a,s)=>a+(+s.revenue||0)*(+s.margin||DB.opportunities.find(o=>+o.id===+s.oppId)?.margin||0.25),0);
+    const secured = DB.opportunities.filter(o=>getStage(o.stageId).stage==='Secured');
+
+    // Stats grid
+    const statsEl = document.getElementById('dash-stats');
+    if(statsEl) statsEl.innerHTML = `
+      <div class="stat-card"><div class="stat-label">FY Forecast Revenue</div><div class="stat-value">R ${fmtNum(totalRev)}</div></div>
+      <div class="stat-card"><div class="stat-label">FY Forecast GP</div><div class="stat-value">R ${fmtNum(totalGP)}</div></div>
+      <div class="stat-card"><div class="stat-label">Active Opportunities</div><div class="stat-value">${activeOpps.length}</div></div>
+      <div class="stat-card"><div class="stat-label">Secured Contracts</div><div class="stat-value">${secured.length}</div></div>`;
+
+    // Stage breakdown
+    const stagesEl = document.getElementById('dash-stages');
+    if(stagesEl) stagesEl.innerHTML = DB.stages.filter(s=>s.stage!=='Lost').map(s=>{
+      const count = DB.opportunities.filter(o=>+o.stageId===+s.id).length;
+      const val = DB.opportunities.filter(o=>+o.stageId===+s.id).reduce((a,o)=>a+getTCV(o),0);
+      return `<div class="stage-row"><span style="color:${s.color||'#888'};font-weight:600;">${s.stage}</span><span>${count} opps</span><span>R ${fmtNum(val)}</span></div>`;
+    }).join('');
+
     // Recent opps
-    const recentEl = document.getElementById('dash-recent-opps');
+    const recentEl = document.getElementById('dash-recent');
     if(recentEl){
-      const recent = [...DB.opportunities]
-        .sort((a,b)=>new Date(b.createdDate||0)-new Date(a.createdDate||0))
-        .slice(0,5);
-      recentEl.innerHTML = recent.length ? recent.map(o=>{
-        const org = getOrg(o.orgId);
-        const stage = getStage(o.stageId);
-        return '<tr><td>'+o.name+'</td><td>'+(org.name||'')+'</td><td>'+(stage.stage||'')+'</td><td>R '+fmtNum(getTCV(o))+'</td></tr>';
-      }).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px;">No opportunities yet</td></tr>';
+      const recent = [...DB.opportunities].sort((a,b)=>(b.createdDate||'').localeCompare(a.createdDate||'')).slice(0,5);
+      recentEl.innerHTML = recent.length ? `<table class="sf-table" style="width:100%"><thead><tr><th>Opportunity</th><th>Organisation</th><th>Stage</th><th style="text-align:right">Value</th></tr></thead><tbody>` +
+        recent.map(o=>`<tr onclick="openOppForm(${o.id})" style="cursor:pointer"><td>${o.name}</td><td>${getOrg(o.orgId).name||'—'}</td><td><span class="badge" style="background:${getStage(o.stageId).color||'#888'}20;color:${getStage(o.stageId).color||'#888'}">${getStage(o.stageId).stage||'—'}</span></td><td style="text-align:right">R ${fmtNum(getTCV(o))}</td></tr>`).join('') +
+        '</tbody></table>' : '<div style="text-align:center;padding:28px;color:var(--text3);">No opportunities yet — <a onclick="showNewOppModal()" style="color:var(--red);cursor:pointer;">create one</a></div>';
     }
   } catch(e){ console.error('renderDashboard error:', e); }
 }
 
 function renderForecast() {
   try {
-    const el = document.getElementById('forecast-table');
-    if(!el) return;
+    const thead = document.getElementById('forecast-thead');
+    const tbody = document.getElementById('forecast-tbody');
+    if(!tbody) return;
     const months = getFYMonths();
+    if(thead) thead.innerHTML = '<tr><th>Opportunity</th><th>Organisation</th>'+months.map(m=>'<th style="text-align:right;font-size:11px;">'+m.slice(5)+'</th>').join('')+'<th style="text-align:right">Total</th></tr>';
     const rows = DB.opportunities.filter(o=>getStage(o.stageId).stage!=='Lost').map(o=>{
       const org = getOrg(o.orgId);
       const cells = months.map(m=>{
         const s = DB.opportunityStreams.find(s=>+s.oppId===+o.id&&s.month===m);
-        return '<td style="text-align:right">'+(s?fmtNum(s.revenue):'')+'</td>';
+        return '<td style="text-align:right">'+(s&&s.revenue?fmtNum(s.revenue):'')+'</td>';
       }).join('');
-      return '<tr><td>'+o.name+'</td><td>'+(org.name||'')+'</td>'+cells+'</tr>';
+      const total = DB.opportunityStreams.filter(s=>+s.oppId===+o.id&&months.includes(s.month)).reduce((a,s)=>a+(+s.revenue||0),0);
+      return '<tr onclick="openOppForm('+o.id+')" style="cursor:pointer"><td>'+o.name+'</td><td>'+(org.name||'')+'</td>'+cells+'<td style="text-align:right;font-weight:600;">R '+fmtNum(total)+'</td></tr>';
     }).join('');
-    el.innerHTML = rows || '<tr><td colspan="20" style="text-align:center;padding:20px;color:var(--text3);">No opportunities</td></tr>';
+    tbody.innerHTML = rows || '<tr><td colspan="20" style="text-align:center;padding:20px;color:var(--text3);">No opportunities</td></tr>';
   } catch(e){ console.error('renderForecast error:', e); }
 }
 
