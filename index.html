@@ -1291,11 +1291,12 @@ async function initOppForm() {
     majorCats.map(m => `<option value="${m.id}" ${oppData.service_major_id==m.id?'selected':''}>${m.name}</option>`).join('');
   if (oppData.service_major_id) await onOppMajorChange();
 
-  // Populate owner (Xone people only)
+  // Populate owner - prefer Xone people but fall back to all people
   const xonePeople = people.filter(p => p.is_xone);
+  const ownerPool = xonePeople.length ? xonePeople : people;
   const ownerSel = document.getElementById('opp-owner-id');
   ownerSel.innerHTML = '<option value="">— select owner —</option>' +
-    xonePeople.map(p => {
+    ownerPool.map(p => {
       const name = [p.first_name, p.last_name].filter(Boolean).join(' ');
       return `<option value="${p.id}" ${oppData.owner_id==p.id?'selected':''}>${name}</option>`;
     }).join('');
@@ -1500,7 +1501,8 @@ function formatRev(n) {
 
 function addCollaboratorRow() {
   const list = document.getElementById('collaborators-list');
-  const people = (allData['people'] || []).filter(p => p.is_xone);
+  const allPeople = allData['people'] || [];
+  const people = allPeople.filter(p => p.is_xone).length ? allPeople.filter(p => p.is_xone) : allPeople;
   const idx = list.children.length;
   const div = document.createElement('div');
   div.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:12px;margin-bottom:10px;align-items:end;';
