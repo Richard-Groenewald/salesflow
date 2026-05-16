@@ -298,18 +298,16 @@ tr:hover td{background:#F8FAFC;}
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">Service Major</label>
-            <select id="opp-service-major-id" class="form-control" onchange="onOppMajorChange()">
-              <option value="">— select —</option>
+            <label class="form-label">Service Type</label>
+            <select id="opp-service-sub-id" class="form-control" onchange="onOppServiceChange()">
+              <option value="">— select service type —</option>
             </select>
+            <input type="hidden" id="opp-service-major-id">
           </div>
         </div>
         <div class="opp-grid-2">
-          <div class="form-group">
-            <label class="form-label">Service Sub</label>
-            <select id="opp-service-sub-id" class="form-control">
-              <option value="">— select major first —</option>
-            </select>
+          <div class="form-group" style="display:none;">
+            <!-- Hidden - major set by service sub selection -->
           </div>
           <div class="form-group">
             <label class="form-label">Notes</label>
@@ -736,18 +734,22 @@ const PAGES = {
     title: 'Service Sub Categories',
     table: 'service_sub',
     columns: [
-      { key: 'major_id',       label: 'Major Category', lookup: 'service_major', lookupLabel: r => r.name },
-      { key: 'name',           label: 'Name' },
-      { key: 'is_recurring',   label: 'Recurring', render: v => v ? '<span class="badge badge-green">Yes</span>' : '<span class="badge badge-gray">No</span>' },
-      { key: 'default_margin', label: 'Default Margin', render: v => v ? v + '%' : '—' },
-      { key: 'active',         label: 'Active', render: v => v ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-gray">Inactive</span>' },
+      { key: 'major_id',        label: 'Major Category', lookup: 'service_major', lookupLabel: r => r.name },
+      { key: 'name',            label: 'Name' },
+      { key: 'is_recurring',    label: 'Recurring', render: v => v ? '<span class="badge badge-green">Yes</span>' : '<span class="badge badge-gray">No</span>' },
+      { key: 'default_margin',  label: 'Default Margin', render: v => v != null ? v + '%' : '—' },
+      { key: 'min_margin',      label: 'Min Margin', render: v => v != null ? v + '%' : '—' },
+      { key: 'default_duration',label: 'Duration', render: v => v ? v + ' mo' : '—' },
+      { key: 'active',          label: 'Active', render: v => v ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-gray">Inactive</span>' },
     ],
     fields: [
-      { key: 'major_id',       label: 'Major Category', type: 'lookup', lookupTable: 'service_major', lookupLabel: r => r.name, required: true },
-      { key: 'name',           label: 'Name', required: true },
-      { key: 'is_recurring',   label: 'Recurring Revenue', type: 'checkbox' },
-      { key: 'default_margin', label: 'Default Margin (%)', type: 'number' },
-      { key: 'active',         label: 'Active', type: 'checkbox' },
+      { key: 'major_id',        label: 'Major Category', type: 'lookup', lookupTable: 'service_major', lookupLabel: r => r.name, required: true },
+      { key: 'name',            label: 'Name', required: true },
+      { key: 'is_recurring',    label: 'Recurring Revenue', type: 'checkbox' },
+      { key: 'default_margin',  label: 'Default Margin (%)', type: 'number' },
+      { key: 'min_margin',      label: 'Minimum Margin (%)', type: 'number' },
+      { key: 'default_duration',label: 'Default Duration (months)', type: 'number' },
+      { key: 'active',          label: 'Active', type: 'checkbox' },
     ],
   },
 
@@ -1208,6 +1210,21 @@ async function openNewOpportunity() {
   oppData = {};
   oppMonths = {};
   await initOppForm();
+
+  // Set defaults after form initialised
+  // Default owner = logged in user
+  const ownerSel = document.getElementById('opp-owner-id');
+  if (ownerSel && currentUser?.personId) ownerSel.value = currentUser.personId;
+
+  // Default stage = first stage in Opportunity-Open category (Lead)
+  const stages = allData['stages'] || [];
+  const stageCats = allData['stage_categories'] || [];
+  const openCat = stageCats.find(c => c.name === 'Opportunity-Open');
+  if (openCat) {
+    const leadStage = stages.filter(s => +s.category_id === +openCat.id).sort((a,b) => a.sort_order - b.sort_order)[0];
+    if (leadStage) document.getElementById('opp-stage-id').value = leadStage.id;
+  }
+
   document.getElementById('opp-page-title').textContent = 'New Opportunity';
   document.getElementById('opp-page').classList.add('active');
   switchOppTab('general', document.querySelector('.opp-tab'));
@@ -1285,11 +1302,24 @@ async function initOppForm() {
     }
   });
 
-  // Populate service major
-  const majSel = document.getElementById('opp-service-major-id');
-  majSel.innerHTML = '<option value="">— select —</option>' +
-    majorCats.map(m => `<option value="${m.id}" ${oppData.service_major_id==m.id?'selected':''}>${m.name}</option>`).join('');
-  if (oppData.service_major_id) await onOppMajorChange();
+  // Populate combined service dropdown grouped by major category
+  const subSel = document.getElementById('opp-service-sub-id');
+  const allSubs = await apiGet('service_sub', 'active=eq.true&select=*&order=name.asc');
+  allData['service_sub_all'] = allSubs;
+  subSel.innerHTML = '<option value="">— select service type —</option>';
+  majorCats.forEach(m => {
+    const subs = allSubs.filter(s => +s.major_id === +m.id);
+    if (subs.length) {
+      subSel.innerHTML += `<optgroup label="${m.name}">` +
+        subs.map(s => `<option value="${s.id}" data-major-id="${s.major_id}" ${oppData.service_sub_id==s.id?'selected':''}>${s.name}</option>`).join('') +
+        '</optgroup>';
+    }
+  });
+  // Set major hidden field if sub already selected
+  if (oppData.service_sub_id) {
+    const sub = allSubs.find(s => +s.id === +oppData.service_sub_id);
+    if (sub) document.getElementById('opp-service-major-id').value = sub.major_id;
+  }
 
   // Populate owner - prefer Xone people but fall back to all people
   const xonePeople = people.filter(p => p.is_xone);
@@ -1314,13 +1344,26 @@ async function initOppForm() {
 }
 
 async function onOppMajorChange() {
-  const majorId = document.getElementById('opp-service-major-id').value;
+  // Legacy - no longer used, kept for compatibility
+}
+
+function onOppServiceChange() {
   const subSel = document.getElementById('opp-service-sub-id');
-  if (!majorId) { subSel.innerHTML = '<option value="">— select major first —</option>'; return; }
-  const subs = await apiGet('service_sub', `major_id=eq.${majorId}&active=eq.true&select=*&order=name.asc`);
-  allData['service_sub_' + majorId] = subs;
-  subSel.innerHTML = '<option value="">— select —</option>' +
-    subs.map(s => `<option value="${s.id}" ${oppData.service_sub_id==s.id?'selected':''}>${s.name}</option>`).join('');
+  const selected = subSel.options[subSel.selectedIndex];
+  if (!selected || !selected.value) return;
+
+  // Set hidden major id
+  const majorId = selected.dataset.majorId;
+  document.getElementById('opp-service-major-id').value = majorId;
+
+  // Apply defaults from service sub
+  const subs = allData['service_sub_all'] || [];
+  const sub = subs.find(s => +s.id === +selected.value);
+  if (sub) {
+    if (sub.default_margin) document.getElementById('opp-margin-pct').value = sub.default_margin;
+    if (sub.default_duration) document.getElementById('opp-num-months').value = sub.default_duration;
+    recalcGrid();
+  }
 }
 
 function onOppStageChange() {
@@ -1836,11 +1879,11 @@ async function renderOpportunitiesPage() {
       const owner = people.find(p => +p.id === +d.owner_id);
       const ownerName = owner ? [owner.first_name, owner.last_name].filter(Boolean).join(' ') : '—';
       return `<tr onclick="openOpportunity(${d.id})" style="cursor:pointer;">
-        <td style="font-weight:600;">${d.name}</td>
-        <td>${org?.name || '—'}</td>
+        <td style="font-weight:600;">${org?.name || '—'}</td>
+        <td>${d.name}</td>
+        <td>${d.order_date ? new Date(d.order_date).toLocaleDateString('en-ZA') : '—'}</td>
         <td><span class="badge badge-blue">${stage?.name || '—'}</span></td>
-        <td>${ownerName}</td>
-        <td style="text-align:right;">—</td>
+        <td style="text-align:right;">${d.probability ? d.probability + '%' : '—'}</td>
         <td onclick="event.stopPropagation()">
           <button class="btn btn-ghost btn-sm" onclick="openOpportunity(${d.id})">Edit</button>
           <button class="btn btn-danger btn-sm" onclick="confirmDeleteDeal(${d.id})">Delete</button>
