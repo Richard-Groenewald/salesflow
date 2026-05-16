@@ -175,7 +175,7 @@ tr:hover td{background:#F8FAFC;}
       <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;" id="sidebar-user-role"></div>
       <div id="conn-status" class="conn-badge offline"><div class="conn-dot"></div> Offline</div>
       <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v1.7</div>
+        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v1.9</div>
         <button class="btn btn-sm" onclick="doLogout()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);border:none;font-size:11px;">Sign out</button>
       </div>
     </div>
@@ -410,9 +410,114 @@ const PAGES = {
   role_permissions: {
     title: 'Role Permissions',
     table: 'role_permissions',
-    custom: true, // handled by custom renderer
+    custom: true,
     columns: [],
     fields: [],
+  },
+
+  // ── Lookups ──────────────────────────────────────────────
+  industry_sectors: {
+    title: 'Industry Sectors',
+    table: 'industry_sectors',
+    columns: [
+      { key: 'name',   label: 'Name' },
+      { key: 'active', label: 'Active', render: v => v ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-gray">Inactive</span>' },
+    ],
+    fields: [
+      { key: 'name',   label: 'Name', required: true },
+      { key: 'active', label: 'Active', type: 'checkbox' },
+    ],
+  },
+
+  party_categories: {
+    title: 'Party Categories',
+    table: 'party_categories',
+    columns: [
+      { key: 'name',   label: 'Name' },
+      { key: 'active', label: 'Active', render: v => v ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-gray">Inactive</span>' },
+    ],
+    fields: [
+      { key: 'name',   label: 'Name', required: true },
+      { key: 'active', label: 'Active', type: 'checkbox' },
+    ],
+  },
+
+  regions: {
+    title: 'Regions',
+    table: 'regions',
+    columns: [
+      { key: 'name',   label: 'Name' },
+      { key: 'active', label: 'Active', render: v => v ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-gray">Inactive</span>' },
+    ],
+    fields: [
+      { key: 'name',   label: 'Name', required: true },
+      { key: 'active', label: 'Active', type: 'checkbox' },
+    ],
+  },
+
+  service_major: {
+    title: 'Service Major Categories',
+    table: 'service_major',
+    columns: [
+      { key: 'name',   label: 'Name' },
+      { key: 'active', label: 'Active', render: v => v ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-gray">Inactive</span>' },
+    ],
+    fields: [
+      { key: 'name',   label: 'Name', required: true },
+      { key: 'active', label: 'Active', type: 'checkbox' },
+    ],
+  },
+
+  service_sub: {
+    title: 'Service Sub Categories',
+    table: 'service_sub',
+    columns: [
+      { key: 'major_id',       label: 'Major Category', lookup: 'service_major', lookupLabel: r => r.name },
+      { key: 'name',           label: 'Name' },
+      { key: 'is_recurring',   label: 'Recurring', render: v => v ? '<span class="badge badge-green">Yes</span>' : '<span class="badge badge-gray">No</span>' },
+      { key: 'default_margin', label: 'Default Margin', render: v => v ? v + '%' : '—' },
+      { key: 'active',         label: 'Active', render: v => v ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-gray">Inactive</span>' },
+    ],
+    fields: [
+      { key: 'major_id',       label: 'Major Category', type: 'lookup', lookupTable: 'service_major', lookupLabel: r => r.name, required: true },
+      { key: 'name',           label: 'Name', required: true },
+      { key: 'is_recurring',   label: 'Recurring Revenue', type: 'checkbox' },
+      { key: 'default_margin', label: 'Default Margin (%)', type: 'number' },
+      { key: 'active',         label: 'Active', type: 'checkbox' },
+    ],
+  },
+
+  stage_categories: {
+    title: 'Stage Categories',
+    table: 'stage_categories',
+    columns: [
+      { key: 'name',       label: 'Name' },
+      { key: 'sort_order', label: 'Sort Order' },
+    ],
+    fields: [
+      { key: 'name',       label: 'Name', required: true },
+      { key: 'sort_order', label: 'Sort Order', type: 'number' },
+    ],
+    readOnly: true,
+  },
+
+  stages: {
+    title: 'Stages',
+    table: 'stages',
+    columns: [
+      { key: 'category_id',  label: 'Category', lookup: 'stage_categories', lookupLabel: r => r.name },
+      { key: 'name',         label: 'Stage Name' },
+      { key: 'probability',  label: 'Probability', render: v => v + '%' },
+      { key: 'sort_order',   label: 'Order' },
+      { key: 'active',       label: 'Active', render: v => v ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-gray">Inactive</span>' },
+    ],
+    fields: [
+      { key: 'category_id', label: 'Stage Category', type: 'lookup', lookupTable: 'stage_categories', lookupLabel: r => r.name, required: true },
+      { key: 'name',        label: 'Stage Name', required: true },
+      { key: 'probability', label: 'Probability (%)', type: 'number' },
+      { key: 'sort_order',  label: 'Sort Order', type: 'number' },
+      { key: 'active',      label: 'Active', type: 'checkbox' },
+    ],
   },
 };
 
@@ -432,7 +537,7 @@ function showPage(page) {
   document.getElementById('page-sub').textContent = '';
 
   // Show/hide add button
-  document.getElementById('add-btn').style.display = cfg.custom ? 'none' : '';
+  document.getElementById('add-btn').style.display = (cfg.custom || cfg.readOnly) ? 'none' : '';
 
   // Load data
   loadTable(page);
@@ -473,6 +578,8 @@ async function loadTable(page) {
 
     currentData = await apiGet(cfg.table, 'select=*&order=id.asc');
     allData[cfg.table] = currentData;
+    // Cache roles and permissions for role_permissions matrix
+    if (cfg.table === 'roles' || cfg.table === 'permissions') allData[cfg.table] = currentData;
 
     document.getElementById('page-sub').textContent = currentData.length + ' record' + (currentData.length !== 1 ? 's' : '');
 
@@ -492,7 +599,7 @@ async function loadTable(page) {
         }
         return `<td>${val ?? '—'}</td>`;
       }).join('');
-      const actions = `<td>
+      const actions = cfg.readOnly ? '<td><span class="text-muted text-sm">Read only</span></td>' : `<td>
         <button class="btn btn-ghost btn-sm" onclick="openEditModal(${row.id})">Edit</button>
         <button class="btn btn-danger btn-sm" onclick="confirmDelete(${row.id})">Delete</button>
       </td>`;
@@ -852,15 +959,31 @@ function doLogout() {
 async function renderRolePermissions() {
   const body = document.getElementById('table-body');
   const head = document.getElementById('table-head');
-  head.innerHTML = '';
-  body.innerHTML = '<tr class="empty-row"><td colspan="2">Loading...</td></tr>';
+
+  // Use cache if available, fetch in background
+  const cachedRoles = allData['roles'];
+  const cachedPerms = allData['permissions'];
+
+  if (cachedRoles && cachedPerms) {
+    // Render with cached roles/perms immediately, only fetch assignments
+    head.innerHTML = '<tr><th style="width:200px;">Permission</th>' +
+      cachedRoles.map(r => `<th style="text-align:center;white-space:nowrap;">${r.name}</th>`).join('') + '</tr>';
+    body.innerHTML = '<tr class="empty-row"><td colspan="' + (cachedRoles.length+1) + '">Loading assignments...</td></tr>';
+  } else {
+    head.innerHTML = '';
+    body.innerHTML = '<tr class="empty-row"><td colspan="2">Loading...</td></tr>';
+  }
 
   try {
     const [roles, permissions, assignments] = await Promise.all([
-      apiGet('roles', 'select=*&order=name.asc'),
-      apiGet('permissions', 'select=*&order=name.asc'),
+      cachedRoles ? Promise.resolve(cachedRoles) : apiGet('roles', 'select=*&order=name.asc'),
+      cachedPerms ? Promise.resolve(cachedPerms) : apiGet('permissions', 'select=*&order=name.asc'),
       apiGet('role_permissions', 'select=role_id,permission_id')
     ]);
+
+    // Update cache
+    allData['roles'] = roles;
+    allData['permissions'] = permissions;
 
     document.getElementById('page-sub').textContent = roles.length + ' roles, ' + permissions.length + ' permissions';
 
