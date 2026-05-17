@@ -195,7 +195,7 @@ tr:hover td{background:#F8FAFC;}
     <div id="login-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;" onclick="doLogin()">Sign In</button>
     <div style="margin-top:16px;font-size:11px;color:var(--text3);">Password disabled — test mode</div>
-    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v4.0</div>
+    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v4.1</div>
   </div>
 </div>
 
@@ -214,7 +214,7 @@ tr:hover td{background:#F8FAFC;}
       <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;" id="sidebar-user-role"></div>
       <div id="conn-status" class="conn-badge offline"><div class="conn-dot"></div> Offline</div>
       <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v4.0</div>
+        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v4.1</div>
         <button class="btn btn-sm" onclick="doLogout()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);border:none;font-size:11px;">Sign out</button>
       </div>
     </div>
@@ -271,11 +271,10 @@ tr:hover td{background:#F8FAFC;}
 
     <!-- General Tab -->
     <div class="opp-tab-content active" id="opp-tab-general">
-      <div style="display:grid;grid-template-columns:480px 1fr;gap:24px;">
+      <div style="display:grid;grid-template-columns:600px 1fr;gap:24px;">
 
-        <!-- Left column — total width 480px matching Product+Region+Stage row -->
+        <!-- Left column -->
         <div>
-          <!-- Client: field fills space, Create button right-aligned -->
           <div class="form-group">
             <label class="form-label">Client <span style="color:var(--red)">*</span></label>
             <div style="display:flex;gap:8px;">
@@ -286,14 +285,13 @@ tr:hover td{background:#F8FAFC;}
             </div>
           </div>
 
-          <!-- Deal Name: full width -->
           <div class="form-group">
             <label class="form-label">Deal Name <span style="color:var(--red)">*</span></label>
             <input type="text" id="opp-name" class="form-control">
           </div>
 
-          <!-- Product/Service + Region + Stage: fixed widths that sum to 480px -->
-          <div style="display:flex;gap:8px;">
+          <!-- Product/Service + Region + Stage + Probability -->
+          <div style="display:flex;gap:8px;align-items:flex-start;">
             <div class="form-group" style="flex:0 0 200px;margin-bottom:0;">
               <label class="form-label">Product/Service Type</label>
               <select id="opp-service-sub-id" class="form-control" onchange="onOppServiceChange()">
@@ -301,28 +299,32 @@ tr:hover td{background:#F8FAFC;}
               </select>
               <input type="hidden" id="opp-service-major-id">
             </div>
-            <div class="form-group" style="flex:0 0 130px;margin-bottom:0;">
+            <div class="form-group" style="flex:0 0 120px;margin-bottom:0;">
               <label class="form-label">Region</label>
               <select id="opp-region-id" class="form-control">
                 <option value="">— select —</option>
               </select>
             </div>
-            <div class="form-group" style="flex:1;margin-bottom:0;">
+            <div class="form-group" style="flex:0 0 150px;margin-bottom:0;">
               <label class="form-label">Stage <span style="color:var(--red)">*</span></label>
               <select id="opp-stage-id" class="form-control" onchange="onOppStageChange()">
                 <option value="">— select —</option>
               </select>
             </div>
+            <div class="form-group" style="flex:0 0 100px;margin-bottom:0;">
+              <label class="form-label">Probability %</label>
+              <input type="number" id="opp-probability" class="form-control" min="0" max="100" value="50" oninput="onProbabilityInput()">
+              <div id="opp-probability-hint" style="font-size:11px;color:var(--text3);margin-top:3px;min-height:14px;"></div>
+            </div>
           </div>
 
-          <!-- Description: full width -->
           <div class="form-group" style="margin-top:16px;margin-bottom:0;">
             <label class="form-label">Description</label>
             <textarea id="opp-notes" class="form-control" style="height:160px;resize:none;"></textarea>
           </div>
         </div>
 
-        <!-- Right column: Notes filling full height -->
+        <!-- Right column: Notes -->
         <div class="form-group" style="margin-bottom:0;">
           <label class="form-label">Notes</label>
           <textarea id="opp-ext-notes" class="form-control" style="height:calc(100% - 28px);min-height:320px;resize:none;"></textarea>
@@ -795,16 +797,21 @@ const PAGES = {
     columns: [
       { key: 'category_id',  label: 'Category', lookup: 'stage_categories', lookupLabel: r => r.name },
       { key: 'name',         label: 'Stage Name' },
-      { key: 'probability',  label: 'Probability', render: v => v + '%' },
-      { key: 'sort_order',   label: 'Order' },
+      { key: 'probability',  label: 'Default %', render: v => v + '%' },
+      { key: 'min_probability', label: 'Min %', render: v => v != null ? v + '%' : '—' },
+      { key: 'max_probability', label: 'Max %', render: v => v != null ? v + '%' : '—' },
+      { key: 'probability_hint', label: 'Hint' },
       { key: 'active',       label: 'Active', render: v => v ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-gray">Inactive</span>' },
     ],
     fields: [
-      { key: 'category_id', label: 'Stage Category', type: 'lookup', lookupTable: 'stage_categories', lookupLabel: r => r.name, required: true },
-      { key: 'name',        label: 'Stage Name', required: true },
-      { key: 'probability', label: 'Probability (%)', type: 'number' },
-      { key: 'sort_order',  label: 'Sort Order', type: 'number' },
-      { key: 'active',      label: 'Active', type: 'checkbox' },
+      { key: 'category_id',     label: 'Stage Category', type: 'lookup', lookupTable: 'stage_categories', lookupLabel: r => r.name, required: true },
+      { key: 'name',            label: 'Stage Name', required: true },
+      { key: 'probability',     label: 'Default Probability (%)', type: 'number' },
+      { key: 'min_probability', label: 'Minimum Probability (%)', type: 'number' },
+      { key: 'max_probability', label: 'Maximum Probability (%)', type: 'number' },
+      { key: 'probability_hint',label: 'Probability Hint (shown to user)' },
+      { key: 'sort_order',      label: 'Sort Order', type: 'number' },
+      { key: 'active',          label: 'Active', type: 'checkbox' },
     ],
   },
 };
@@ -1408,9 +1415,38 @@ function onOppStageChange() {
   const stageCats = allData['stage_categories'] || [];
   const stage = stages.find(s => +s.id === +stageId);
   const cat = stage ? stageCats.find(c => +c.id === +stage.category_id) : null;
+
+  // Show/hide lost tab
   const isLost = cat && cat.name === 'Opportunity-Closed';
   const lostTab = document.getElementById('lost-tab');
   if (lostTab) lostTab.style.display = isLost ? '' : 'none';
+
+  // Set probability defaults from stage
+  if (stage) {
+    const probEl = document.getElementById('opp-probability');
+    if (probEl) {
+      // Only set default if not already customised
+      if (!probEl.dataset.userSet) {
+        probEl.value = stage.probability || 50;
+      }
+      probEl.min = stage.min_probability ?? 0;
+      probEl.max = stage.max_probability ?? 100;
+      const hintEl = document.getElementById('opp-probability-hint');
+      if (hintEl) hintEl.textContent = stage.probability_hint || '';
+    }
+  }
+}
+
+function onProbabilityInput() {
+  const probEl = document.getElementById('opp-probability');
+  if (probEl) {
+    probEl.dataset.userSet = '1';
+    // Clamp to min/max
+    const min = +probEl.min || 0;
+    const max = +probEl.max || 100;
+    if (+probEl.value < min) probEl.value = min;
+    if (+probEl.value > max) probEl.value = max;
+  }
 }
 
 function onOppOrgChange() {
