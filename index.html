@@ -195,7 +195,7 @@ tr:hover td{background:#F8FAFC;}
     <div id="login-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;" onclick="doLogin()">Sign In</button>
     <div style="margin-top:16px;font-size:11px;color:var(--text3);">Password disabled — test mode</div>
-    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v4.6</div>
+    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v4.8</div>
   </div>
 </div>
 
@@ -214,7 +214,7 @@ tr:hover td{background:#F8FAFC;}
       <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;" id="sidebar-user-role"></div>
       <div id="conn-status" class="conn-badge offline"><div class="conn-dot"></div> Offline</div>
       <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v4.6</div>
+        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v4.8</div>
         <button class="btn btn-sm" onclick="doLogout()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);border:none;font-size:11px;">Sign out</button>
       </div>
     </div>
@@ -308,7 +308,7 @@ tr:hover td{background:#F8FAFC;}
             </div>
             <div class="form-group" style="flex:0 0 150px;margin-bottom:0;">
               <label class="form-label">Stage <span style="color:var(--red)">*</span></label>
-              <select id="opp-stage-id" class="form-control" onchange="onOppStageChange()">
+              <select id="opp-stage-id" class="form-control" onchange="onOppStageChange(true)">
                 <option value="">— select —</option>
               </select>
             </div>
@@ -582,6 +582,7 @@ const PAGES = {
       { key: 'name',                label: 'Name' },
       { key: 'legal_name',          label: 'Legal Name' },
       { key: 'website',             label: 'Website' },
+      { key: 'home_organisation',   label: 'Home Org', render: v => v ? '<span class="badge badge-blue">Home</span>' : '' },
       { key: 'allows_system_users', label: 'System Users', render: v => v ? '<span class="badge badge-green">Eligible</span>' : '<span class="badge badge-gray">No</span>' },
     ],
     fields: [
@@ -590,6 +591,7 @@ const PAGES = {
       { key: 'website',             label: 'Website', type: 'url' },
       { key: 'address',             label: 'Address', type: 'textarea' },
       { key: 'notes',               label: 'Notes', type: 'textarea' },
+      { key: 'home_organisation',   label: 'Home Organisation', type: 'checkbox', adminOnly: true },
       { key: 'allows_system_users', label: 'Eligible for System Users (Admin only)', type: 'checkbox', adminOnly: true },
     ],
   },
@@ -769,6 +771,14 @@ const PAGES = {
     ],
   },
 
+  home_org_members: {
+    title: 'Home Organisation Members',
+    table: 'home_organisation_members',
+    custom: true,
+    columns: [],
+    fields: [],
+  },
+
   stage_categories: {
     title: 'Stage Categories',
     table: 'stage_categories',
@@ -857,6 +867,7 @@ async function loadTable(page) {
     if (page === 'role_permissions') { await renderRolePermissions(); return; }
     if (page === 'opportunities') { await renderOpportunitiesPage(); return; }
     if (page === 'settings') { await renderSettingsPage(); return; }
+    if (page === 'home_org_members') { await renderHomeOrgMembers(); return; }
   }
 
   const body = document.getElementById('table-body');
@@ -1148,6 +1159,8 @@ const MENU = [
         icon: '<path d="M8 1L3 4v4c0 3 2.2 5.7 5 6.4C11 13.7 13 11 13 8V4L8 1z"/>' },
       { page: 'parties',          label: 'Parties',       permission: 'manage_parties',
         icon: '<circle cx="5" cy="6" r="2.5"/><circle cx="11" cy="6" r="2.5"/><path d="M0 13c0-2 2-3.5 5-3.5M16 13c0-2-2-3.5-5-3.5M5.5 13c0-2 1.1-3.5 2.5-3.5s2.5 1.5 2.5 3.5"/>' },
+      { page: 'home_org_members', label: 'Home Org Members', permission: 'manage_people',
+        icon: '<path d="M8 1L3 4v4c0 3 2.2 5.7 5 6.4C11 13.7 13 11 13 8V4L8 1z"/>' },
     ]
   },
   {
@@ -1391,12 +1404,11 @@ async function initOppForm() {
   // Populate form fields
   if (oppData.name) document.getElementById('opp-name').value = oppData.name;
   if (oppData.margin_pct) document.getElementById('opp-margin-pct').value = oppData.margin_pct;
-  if (oppData.probability != null) {
-    const probEl = document.getElementById('opp-probability');
-    if (probEl) {
-      probEl.value = oppData.probability;
-      probEl.dataset.userSet = '1'; // mark as user-set so stage change doesn't override
-    }
+  // Set probability BEFORE stage change fires, so it doesn't get overridden
+  const probEl = document.getElementById('opp-probability');
+  if (probEl && oppData.probability != null) {
+    probEl.dataset.userSet = '1';
+    probEl.value = oppData.probability;
   }
   if (oppData.order_date) document.getElementById('opp-order-date').value = oppData.order_date;
   if (oppData.start_date) document.getElementById('opp-start-date').value = oppData.start_date;
@@ -1431,7 +1443,7 @@ function onOppServiceChange() {
   }
 }
 
-function onOppStageChange() {
+function onOppStageChange(userTriggered) {
   const stageId = document.getElementById('opp-stage-id').value;
   const stages = allData['stages'] || [];
   const stageCats = allData['stage_categories'] || [];
@@ -1443,11 +1455,17 @@ function onOppStageChange() {
   const lostTab = document.getElementById('lost-tab');
   if (lostTab) lostTab.style.display = isLost ? '' : 'none';
 
+  // If user explicitly changed stage, clear userSet so probability resets to stage default
+  if (userTriggered) {
+    const probEl = document.getElementById('opp-probability');
+    if (probEl) delete probEl.dataset.userSet;
+  }
+
   // Set probability defaults from stage
   if (stage) {
     const probEl = document.getElementById('opp-probability');
     if (probEl) {
-      if (!probEl.dataset.userSet) {
+      if (!probEl.dataset.userSet || probEl.dataset.userSet === '0') {
         probEl.value = stage.probability || 50;
       }
       probEl.min = stage.min_probability ?? 0;
@@ -2515,6 +2533,186 @@ async function onPartyTypeChange(type) {
     }
   } catch(e) {
     refEl.innerHTML = '<option value="">Error loading options</option>';
+  }
+}
+
+
+// ── Home Organisation Members ─────────────────────────────
+async function renderHomeOrgMembers() {
+  const head = document.getElementById('table-head');
+  const body = document.getElementById('table-body');
+  document.getElementById('add-btn').style.display = '';
+  document.getElementById('add-btn').onclick = () => openAddHomeMemberModal();
+  document.getElementById('add-btn').textContent = '+ Add Member';
+
+  head.innerHTML = '<tr><th>Name</th><th>Organisation</th><th>Role</th><th>System User</th><th>Actions</th></tr>';
+  body.innerHTML = '<tr class="empty-row"><td colspan="5">Loading...</td></tr>';
+
+  try {
+    const [members, people, orgs, roles, sysUsers] = await Promise.all([
+      apiGet('home_organisation_members', 'select=*'),
+      allData['people'] || apiGet('people', 'select=*'),
+      allData['organisations'] || apiGet('organisations', 'select=*'),
+      allData['roles'] || apiGet('roles', 'select=*'),
+      apiGet('system_users', 'select=person_id,active'),
+    ]);
+
+    allData['people'] = people;
+    allData['organisations'] = orgs;
+    allData['roles'] = roles;
+
+    document.getElementById('page-sub').textContent = members.length + ' member' + (members.length !== 1 ? 's' : '');
+
+    if (!members.length) {
+      body.innerHTML = '<tr class="empty-row"><td colspan="5">No members yet — click "+ Add Member" to add one</td></tr>';
+      return;
+    }
+
+    body.innerHTML = members.map(m => {
+      const person = people.find(p => +p.id === +m.person_id);
+      const org = orgs.find(o => +o.id === +m.org_id);
+      const role = roles.find(r => +r.id === +m.role_id);
+      const sysUser = sysUsers.find(s => +s.person_id === +m.person_id);
+      const name = person ? [person.first_name, person.last_name].filter(Boolean).join(' ') : '—';
+      const isSystemUser = !!sysUser;
+      return `<tr>
+        <td style="font-weight:600;">${name}</td>
+        <td>${org?.name || '—'}</td>
+        <td>
+          <span class="badge ${role?.is_system ? 'badge-blue' : 'badge-gray'}">${role?.name || '—'}</span>
+          ${role?.is_system ? '<span style="font-size:10px;color:var(--text3);margin-left:4px;">system</span>' : ''}
+        </td>
+        <td>${isSystemUser
+          ? `<span class="badge badge-green">${sysUser.active ? 'Active' : 'Inactive'}</span>`
+          : '<span class="badge badge-gray">No access</span>'}</td>
+        <td>
+          <button class="btn btn-ghost btn-sm" onclick="openEditHomeMemberModal(${m.id})">Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="confirmDeleteHomeMember(${m.id})">Remove</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+  } catch(e) {
+    body.innerHTML = `<tr class="empty-row"><td colspan="5">Error: ${e.message}</td></tr>`;
+  }
+}
+
+async function openAddHomeMemberModal(editMember) {
+  // Load home organisations
+  const orgs = allData['organisations'] || await apiGet('organisations', 'select=*');
+  const homeOrgs = orgs.filter(o => o.home_organisation);
+  const people = allData['people'] || await apiGet('people', 'select=*');
+  const roles = allData['roles'] || await apiGet('roles', 'select=*&order=name.asc');
+  allData['organisations'] = orgs;
+  allData['people'] = people;
+  allData['roles'] = roles;
+
+  const isEdit = !!editMember;
+  const title = isEdit ? 'Edit Member' : 'Add Home Org Member';
+
+  const html = `
+    <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+      <div class="modal" style="width:520px;">
+        <div class="modal-header">
+          <div class="modal-title">${title}</div>
+          <button class="modal-close" onclick="closeModal()">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Person <span style="color:var(--red)">*</span></label>
+            <select id="hom-person-id" class="form-control" onchange="checkHomeOrgAffiliation()">
+              <option value="">— select person —</option>
+              ${people.map(p => `<option value="${p.id}" ${editMember?.person_id==p.id?'selected':''}>${[p.first_name,p.last_name].filter(Boolean).join(' ')}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Home Organisation <span style="color:var(--red)">*</span></label>
+            <select id="hom-org-id" class="form-control" onchange="checkHomeOrgAffiliation()">
+              <option value="">— select —</option>
+              ${homeOrgs.map(o => `<option value="${o.id}" ${editMember?.org_id==o.id?'selected':''}>${o.name}</option>`).join('')}
+            </select>
+          </div>
+          <div id="hom-affiliation-warning" style="display:none;padding:8px 12px;background:#FEF9C3;border:1px solid #FCD34D;border-radius:var(--radius);font-size:12px;margin-bottom:12px;">
+            ⚠️ This person is not affiliated with the selected organisation. An affiliation will be created automatically on save.
+          </div>
+          <div class="form-group">
+            <label class="form-label">Role <span style="color:var(--red)">*</span></label>
+            <select id="hom-role-id" class="form-control">
+              <option value="">— select role —</option>
+              <optgroup label="System Roles">
+                ${roles.filter(r=>r.is_system).map(r=>`<option value="${r.id}" ${editMember?.role_id==r.id?'selected':''}>${r.name}</option>`).join('')}
+              </optgroup>
+              <optgroup label="Organisational Roles">
+                ${roles.filter(r=>!r.is_system).map(r=>`<option value="${r.id}" ${editMember?.role_id==r.id?'selected':''}>${r.name}</option>`).join('')}
+              </optgroup>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="saveHomeMember(${editMember?.id||'null'})">${isEdit?'Update':'Add'}</button>
+        </div>
+      </div>
+    </div>`;
+
+  document.getElementById('modal-root').innerHTML = html;
+  if (isEdit) checkHomeOrgAffiliation();
+}
+
+async function checkHomeOrgAffiliation() {
+  const personId = document.getElementById('hom-person-id')?.value;
+  const orgId = document.getElementById('hom-org-id')?.value;
+  const warningEl = document.getElementById('hom-affiliation-warning');
+  if (!warningEl || !personId || !orgId) { if(warningEl) warningEl.style.display='none'; return; }
+  const affiliations = await apiGet('person_organisation_roles', `person_id=eq.${personId}&org_id=eq.${orgId}&select=id`);
+  warningEl.style.display = affiliations.length ? 'none' : 'block';
+}
+
+async function saveHomeMember(editId) {
+  const personId = document.getElementById('hom-person-id')?.value;
+  const orgId = document.getElementById('hom-org-id')?.value;
+  const roleId = document.getElementById('hom-role-id')?.value;
+
+  if (!personId || !orgId || !roleId) { showStatus('All fields are required', 'error'); return; }
+
+  try {
+    // Ensure affiliation exists
+    const affiliations = await apiGet('person_organisation_roles', `person_id=eq.${personId}&org_id=eq.${orgId}&select=id`);
+    if (!affiliations.length) {
+      await api('person_organisation_roles', 'POST', {
+        person_id: +personId, org_id: +orgId, role_type: 'Staff', is_primary: false
+      }, '');
+    }
+
+    if (editId) {
+      await api('home_organisation_members', 'PATCH', { role_id: +roleId }, 'id=eq.' + editId);
+    } else {
+      await api('home_organisation_members', 'POST', {
+        person_id: +personId, org_id: +orgId, role_id: +roleId
+      }, '');
+    }
+
+    showStatus(editId ? 'Member updated' : 'Member added');
+    closeModal();
+    await renderHomeOrgMembers();
+  } catch(e) {
+    showStatus('Failed: ' + e.message, 'error');
+  }
+}
+
+async function openEditHomeMemberModal(id) {
+  const members = await apiGet('home_organisation_members', `id=eq.${id}&select=*`);
+  if (members.length) await openAddHomeMemberModal(members[0]);
+}
+
+async function confirmDeleteHomeMember(id) {
+  if (!confirm('Remove this member?')) return;
+  try {
+    await api('home_organisation_members', 'DELETE', null, 'id=eq.' + id);
+    showStatus('Member removed');
+    await renderHomeOrgMembers();
+  } catch(e) {
+    showStatus('Failed: ' + e.message, 'error');
   }
 }
 
