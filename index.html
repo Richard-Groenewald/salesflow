@@ -195,7 +195,7 @@ tr:hover td{background:#F8FAFC;}
     <div id="login-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;" onclick="doLogin()">Sign In</button>
     <div style="margin-top:16px;font-size:11px;color:var(--text3);">Password disabled — test mode</div>
-    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v4.4</div>
+    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v4.6</div>
   </div>
 </div>
 
@@ -214,7 +214,7 @@ tr:hover td{background:#F8FAFC;}
       <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;" id="sidebar-user-role"></div>
       <div id="conn-status" class="conn-badge offline"><div class="conn-dot"></div> Offline</div>
       <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v4.4</div>
+        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v4.6</div>
         <button class="btn btn-sm" onclick="doLogout()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);border:none;font-size:11px;">Sign out</button>
       </div>
     </div>
@@ -276,13 +276,14 @@ tr:hover td{background:#F8FAFC;}
         <!-- Left column -->
         <div>
           <div class="form-group">
-            <label class="form-label">Client <span style="color:var(--red)">*</span></label>
-            <div style="display:flex;gap:8px;">
+            <label class="form-label">Client <span style="color:var(--red)" id="opp-org-required">*</span></label>
+            <div id="opp-org-edit" style="display:flex;gap:8px;">
               <select id="opp-org-id" class="form-control" onchange="onOppOrgChange()" style="flex:1;">
                 <option value="">— select client —</option>
               </select>
               <button class="btn btn-sm" onclick="openAddClientModal()" style="white-space:nowrap;background:var(--navy);color:white;flex-shrink:0;">Create</button>
             </div>
+            <div id="opp-org-display" style="display:none;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);font-weight:600;color:var(--text);"></div>
           </div>
 
           <div class="form-group">
@@ -339,14 +340,10 @@ tr:hover td{background:#F8FAFC;}
     <!-- Commercial Tab -->
     <div class="opp-tab-content" id="opp-tab-commercial">
       <div class="opp-section">
-        <div class="opp-grid-4">
+        <div class="opp-grid-3">
           <div class="form-group">
             <label class="form-label">Margin %</label>
             <input type="number" id="opp-margin-pct" class="form-control" step="0.1" min="0" max="100" value="25" oninput="recalcGrid()">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Probability %</label>
-            <input type="number" id="opp-probability" class="form-control" step="1" min="0" max="100" value="50">
           </div>
           <div class="form-group">
             <label class="form-label">Order Date</label>
@@ -1324,8 +1321,24 @@ async function initOppForm() {
 
   // Populate organisation dropdown
   const orgSel = document.getElementById('opp-org-id');
-  orgSel.innerHTML = '<option value="">— select organisation —</option>' +
+  orgSel.innerHTML = '<option value="">— select client —</option>' +
     orgs.map(o => `<option value="${o.id}" ${oppData.org_id==o.id?'selected':''}>${o.name}</option>`).join('');
+
+  // If editing an existing deal, lock the client field
+  const editEl = document.getElementById('opp-org-edit');
+  const displayEl = document.getElementById('opp-org-display');
+  const reqEl = document.getElementById('opp-org-required');
+  if (oppData.id && editEl && displayEl) {
+    const org = orgs.find(o => +o.id === +oppData.org_id);
+    displayEl.textContent = org ? org.name : '—';
+    editEl.style.display = 'none';
+    displayEl.style.display = 'block';
+    if (reqEl) reqEl.style.display = 'none';
+  } else if (editEl && displayEl) {
+    editEl.style.display = 'flex';
+    displayEl.style.display = 'none';
+    if (reqEl) reqEl.style.display = '';
+  }
 
   // Populate region dropdown
   const regSel = document.getElementById('opp-region-id');
@@ -1378,7 +1391,13 @@ async function initOppForm() {
   // Populate form fields
   if (oppData.name) document.getElementById('opp-name').value = oppData.name;
   if (oppData.margin_pct) document.getElementById('opp-margin-pct').value = oppData.margin_pct;
-  if (oppData.probability) document.getElementById('opp-probability').value = oppData.probability;
+  if (oppData.probability != null) {
+    const probEl = document.getElementById('opp-probability');
+    if (probEl) {
+      probEl.value = oppData.probability;
+      probEl.dataset.userSet = '1'; // mark as user-set so stage change doesn't override
+    }
+  }
   if (oppData.order_date) document.getElementById('opp-order-date').value = oppData.order_date;
   if (oppData.start_date) document.getElementById('opp-start-date').value = oppData.start_date;
   if (oppData.notes) document.getElementById('opp-notes').value = oppData.notes;
