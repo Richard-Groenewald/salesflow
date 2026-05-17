@@ -195,7 +195,7 @@ tr:hover td{background:#F8FAFC;}
     <div id="login-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;" onclick="doLogin()">Sign In</button>
     <div style="margin-top:16px;font-size:11px;color:var(--text3);">Password disabled — test mode</div>
-    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v4.1</div>
+    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v4.3</div>
   </div>
 </div>
 
@@ -214,7 +214,7 @@ tr:hover td{background:#F8FAFC;}
       <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;" id="sidebar-user-role"></div>
       <div id="conn-status" class="conn-badge offline"><div class="conn-dot"></div> Offline</div>
       <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v4.1</div>
+        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v4.3</div>
         <button class="btn btn-sm" onclick="doLogout()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);border:none;font-size:11px;">Sign out</button>
       </div>
     </div>
@@ -281,7 +281,7 @@ tr:hover td{background:#F8FAFC;}
               <select id="opp-org-id" class="form-control" onchange="onOppOrgChange()" style="flex:1;">
                 <option value="">— select client —</option>
               </select>
-              <button class="btn btn-sm" onclick="alert('Create client coming soon')" style="white-space:nowrap;background:var(--navy);color:white;flex-shrink:0;">Create</button>
+              <button class="btn btn-sm" onclick="openAddClientModal()" style="white-space:nowrap;background:var(--navy);color:white;flex-shrink:0;">Create</button>
             </div>
           </div>
 
@@ -311,10 +311,13 @@ tr:hover td{background:#F8FAFC;}
                 <option value="">— select —</option>
               </select>
             </div>
-            <div class="form-group" style="flex:0 0 100px;margin-bottom:0;">
+            <div class="form-group" style="flex:0 0 100px;margin-bottom:0;position:relative;">
               <label class="form-label">Probability %</label>
-              <input type="number" id="opp-probability" class="form-control" min="0" max="100" value="50" oninput="onProbabilityInput()">
-              <div id="opp-probability-hint" style="font-size:11px;color:var(--text3);margin-top:3px;min-height:14px;"></div>
+              <input type="number" id="opp-probability" class="form-control" min="0" max="100" value="50"
+                oninput="onProbabilityInput()"
+                onfocus="showProbHint()"
+                onblur="hideProbHint()">
+              <div id="opp-probability-hint" style="display:none;position:absolute;bottom:calc(100% + 6px);left:0;background:var(--navy);color:white;font-size:12px;padding:7px 11px;border-radius:var(--radius);white-space:nowrap;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,0.2);max-width:260px;white-space:normal;"></div>
             </div>
           </div>
 
@@ -1425,23 +1428,39 @@ function onOppStageChange() {
   if (stage) {
     const probEl = document.getElementById('opp-probability');
     if (probEl) {
-      // Only set default if not already customised
       if (!probEl.dataset.userSet) {
         probEl.value = stage.probability || 50;
       }
       probEl.min = stage.min_probability ?? 0;
       probEl.max = stage.max_probability ?? 100;
-      const hintEl = document.getElementById('opp-probability-hint');
-      if (hintEl) hintEl.textContent = stage.probability_hint || '';
+      // Store hint on the element for popup
+      probEl.dataset.hint = stage.probability_hint || '';
     }
   }
+}
+
+function showProbHint() {
+  const probEl = document.getElementById('opp-probability');
+  const hintEl = document.getElementById('opp-probability-hint');
+  if (!hintEl || !probEl) return;
+  const hint = probEl.dataset.hint || '';
+  const min = probEl.min || 0;
+  const max = probEl.max || 100;
+  const rangeText = `Range: ${min}% – ${max}%`;
+  const fullHint = hint ? `${hint} (${rangeText})` : rangeText;
+  hintEl.textContent = fullHint;
+  hintEl.style.display = 'block';
+}
+
+function hideProbHint() {
+  const hintEl = document.getElementById('opp-probability-hint');
+  if (hintEl) hintEl.style.display = 'none';
 }
 
 function onProbabilityInput() {
   const probEl = document.getElementById('opp-probability');
   if (probEl) {
     probEl.dataset.userSet = '1';
-    // Clamp to min/max
     const min = +probEl.min || 0;
     const max = +probEl.max || 100;
     if (+probEl.value < min) probEl.value = min;
@@ -1827,6 +1846,298 @@ async function saveRevenueStream(dealId) {
   }
 }
 
+
+// ── Fuzzy String Matching ─────────────────────────────────
+function normaliseStr(s) {
+  return (s || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function tokenSetRatio(a, b) {
+  const tokA = new Set(normaliseStr(a).split(' ').filter(Boolean));
+  const tokB = new Set(normaliseStr(b).split(' ').filter(Boolean));
+  const intersection = [...tokA].filter(t => tokB.has(t));
+  const union = new Set([...tokA, ...tokB]);
+  if (!union.size) return 0;
+  return Math.round((intersection.length / union.size) * 100);
+}
+
+function findSimilar(name, list, labelFn, threshold) {
+  threshold = threshold || +(appSettings['similarity_threshold'] || 80);
+  return list
+    .map(item => ({ item, score: tokenSetRatio(name, labelFn(item)) }))
+    .filter(x => x.score >= threshold)
+    .sort((a, b) => b.score - a.score);
+}
+
+// ── Add Client Modal ──────────────────────────────────────
+let newClientContacts = [];
+
+async function openAddClientModal() {
+  newClientContacts = [];
+
+  // Ensure organisations and people are loaded
+  if (!allData['organisations']) allData['organisations'] = await apiGet('organisations', 'select=*');
+  if (!allData['people']) allData['people'] = await apiGet('people', 'select=*');
+
+  const html = `
+    <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+      <div class="modal" style="width:620px;">
+        <div class="modal-header">
+          <div class="modal-title">Add Client</div>
+          <button class="modal-close" onclick="closeModal()">×</button>
+        </div>
+        <div class="modal-body">
+
+          <!-- Organisation section -->
+          <div style="margin-bottom:20px;">
+            <div class="opp-section-title" style="margin-bottom:12px;">Organisation</div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Name <span style="color:var(--red)">*</span></label>
+                <input type="text" id="nc-org-name" class="form-control" placeholder="e.g. Acme Mining (Pty) Ltd" oninput="checkOrgSimilarity()">
+                <div id="nc-org-warning" style="display:none;margin-top:6px;padding:8px 12px;background:#FEF9C3;border:1px solid #FCD34D;border-radius:var(--radius);font-size:12px;"></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Legal Name</label>
+                <input type="text" id="nc-org-legal" class="form-control" placeholder="Full registered name">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Industry Sector</label>
+                <select id="nc-org-sector" class="form-control">
+                  <option value="">— select —</option>
+                  ${(allData['industry_sectors']||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Region</label>
+                <select id="nc-org-region" class="form-control">
+                  <option value="">— select —</option>
+                  ${(allData['regions']||[]).map(r=>`<option value="${r.id}">${r.name}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <!-- Contacts section -->
+          <div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+              <div class="opp-section-title" style="margin-bottom:0;">Contacts <span style="color:var(--red)">*</span> <span style="font-weight:400;color:var(--text3);">(at least one required)</span></div>
+              <button class="btn btn-secondary btn-sm" onclick="addNewClientContact()">+ Add Contact</button>
+            </div>
+            <div id="nc-contacts-list"></div>
+          </div>
+
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="saveNewClient()">Create Client</button>
+        </div>
+      </div>
+    </div>`;
+
+  document.getElementById('modal-root').innerHTML = html;
+
+  // Load industry sectors and regions if needed
+  if (!allData['industry_sectors']) {
+    apiGet('industry_sectors', 'active=eq.true&select=*&order=name.asc').then(d => {
+      allData['industry_sectors'] = d;
+      const sel = document.getElementById('nc-org-sector');
+      if (sel) sel.innerHTML = '<option value="">— select —</option>' + d.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+    });
+  }
+  if (!allData['regions']) {
+    apiGet('regions', 'active=eq.true&select=*&order=name.asc').then(d => {
+      allData['regions'] = d;
+      const sel = document.getElementById('nc-org-region');
+      if (sel) sel.innerHTML = '<option value="">— select —</option>' + d.map(r=>`<option value="${r.id}">${r.name}</option>`).join('');
+    });
+  }
+
+  // Add first contact row automatically
+  addNewClientContact();
+}
+
+let _orgCheckTimer;
+function checkOrgSimilarity() {
+  clearTimeout(_orgCheckTimer);
+  _orgCheckTimer = setTimeout(() => {
+    const name = document.getElementById('nc-org-name')?.value || '';
+    const warningEl = document.getElementById('nc-org-warning');
+    if (!warningEl) return;
+    if (name.length < 3) { warningEl.style.display = 'none'; return; }
+    const orgs = allData['organisations'] || [];
+    const matches = findSimilar(name, orgs, o => o.name);
+    if (matches.length) {
+      warningEl.style.display = 'block';
+      warningEl.innerHTML = '⚠️ Similar clients found: ' +
+        matches.map(m => `<strong>${m.item.name}</strong> (${m.score}% match)`).join(', ') +
+        '. Please confirm this is a new client.';
+    } else {
+      warningEl.style.display = 'none';
+    }
+  }, 400);
+}
+
+function addNewClientContact() {
+  const list = document.getElementById('nc-contacts-list');
+  if (!list) return;
+  const idx = newClientContacts.length;
+  newClientContacts.push({});
+  const isPrimary = idx === 0;
+
+  const div = document.createElement('div');
+  div.id = 'nc-contact-' + idx;
+  div.style.cssText = 'background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px;';
+  div.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <div style="font-size:12px;font-weight:700;color:var(--text2);">
+        ${isPrimary ? '<span class="badge badge-blue">Primary Contact</span>' : 'Additional Contact'}
+      </div>
+      ${!isPrimary ? `<button class="btn btn-danger btn-sm" onclick="removeContact(${idx})">Remove</button>` : ''}
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="flex:0 0 80px;">
+        <label class="form-label">Title</label>
+        <select class="form-control nc-title" data-idx="${idx}">
+          <option value="">—</option>
+          <option>Mr</option><option>Mrs</option><option>Ms</option><option>Dr</option><option>Prof</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">First Name <span style="color:var(--red)">*</span></label>
+        <input type="text" class="form-control nc-first" data-idx="${idx}" oninput="checkPersonSimilarity(${idx})">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Last Name <span style="color:var(--red)">*</span></label>
+        <input type="text" class="form-control nc-last" data-idx="${idx}" oninput="checkPersonSimilarity(${idx})">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Position</label>
+        <input type="text" class="form-control nc-position" data-idx="${idx}" placeholder="e.g. Financial Director">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input type="email" class="form-control nc-email" data-idx="${idx}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Phone</label>
+        <input type="text" class="form-control nc-phone" data-idx="${idx}">
+      </div>
+    </div>
+    <div id="nc-person-warning-${idx}" style="display:none;padding:8px 12px;background:#FEF9C3;border:1px solid #FCD34D;border-radius:var(--radius);font-size:12px;margin-top:4px;"></div>
+  `;
+  list.appendChild(div);
+}
+
+function removeContact(idx) {
+  const el = document.getElementById('nc-contact-' + idx);
+  if (el) el.remove();
+}
+
+let _personCheckTimers = {};
+function checkPersonSimilarity(idx) {
+  clearTimeout(_personCheckTimers[idx]);
+  _personCheckTimers[idx] = setTimeout(() => {
+    const first = document.querySelector(`.nc-first[data-idx="${idx}"]`)?.value || '';
+    const last = document.querySelector(`.nc-last[data-idx="${idx}"]`)?.value || '';
+    const fullName = (first + ' ' + last).trim();
+    const warningEl = document.getElementById('nc-person-warning-' + idx);
+    if (!warningEl) return;
+    if (fullName.length < 3) { warningEl.style.display = 'none'; return; }
+    const people = allData['people'] || [];
+    const matches = findSimilar(fullName, people, p => [p.first_name, p.last_name].filter(Boolean).join(' '));
+    if (matches.length) {
+      warningEl.style.display = 'block';
+      warningEl.innerHTML = '⚠️ Similar contacts found: ' +
+        matches.map(m => `<strong>${[m.item.first_name,m.item.last_name].filter(Boolean).join(' ')}</strong> (${m.score}% match)`).join(', ') +
+        '. Please confirm this is a new person.';
+    } else {
+      warningEl.style.display = 'none';
+    }
+  }, 400);
+}
+
+async function saveNewClient() {
+  const orgName = document.getElementById('nc-org-name')?.value.trim();
+  if (!orgName) { showStatus('Organisation name is required', 'error'); return; }
+
+  // Collect contacts
+  const contactEls = document.querySelectorAll('[id^="nc-contact-"]');
+  if (!contactEls.length) { showStatus('At least one contact is required', 'error'); return; }
+
+  const contacts = [];
+  for (const el of contactEls) {
+    const idx = el.id.replace('nc-contact-', '');
+    const first = el.querySelector('.nc-first')?.value.trim();
+    const last = el.querySelector('.nc-last')?.value.trim();
+    if (!first || !last) { showStatus('All contacts require first and last name', 'error'); return; }
+    contacts.push({
+      title: el.querySelector('.nc-title')?.value || '',
+      first, last,
+      position: el.querySelector('.nc-position')?.value.trim() || '',
+      email: el.querySelector('.nc-email')?.value.trim() || '',
+      phone: el.querySelector('.nc-phone')?.value.trim() || '',
+      isPrimary: idx === '0',
+    });
+  }
+
+  try {
+    // Create organisation
+    const orgPayload = {
+      name: orgName,
+      legal_name: document.getElementById('nc-org-legal')?.value.trim() || null,
+      active: true,
+      allows_system_users: false,
+    };
+    const sectorId = document.getElementById('nc-org-sector')?.value;
+    const regionId = document.getElementById('nc-org-region')?.value;
+
+    const orgResult = await api('organisations', 'POST', orgPayload, 'select=*');
+    const org = orgResult[0];
+    allData['organisations'] = null; // clear cache
+
+    // Create people and affiliations
+    for (const c of contacts) {
+      const initials = ((c.first[0]||'') + (c.last[0]||'')).toUpperCase();
+      const personResult = await api('people', 'POST', {
+        first_name: c.first, last_name: c.last,
+        title: c.title || null, email: c.email || null,
+        phone: c.phone || null, initials,
+        is_xone: false,
+      }, 'select=*');
+      const person = personResult[0];
+      allData['people'] = null; // clear cache
+
+      // Create affiliation
+      await api('person_organisation_roles', 'POST', {
+        person_id: person.id, org_id: org.id,
+        role_type: c.position || 'Contact',
+        is_primary: c.isPrimary,
+      }, '');
+    }
+
+    showStatus('Client created successfully');
+    closeModal();
+
+    // Reload organisations and select the new one
+    allData['organisations'] = await apiGet('organisations', 'select=*&order=name.asc');
+    const orgSel = document.getElementById('opp-org-id');
+    if (orgSel) {
+      orgSel.innerHTML = '<option value="">— select client —</option>' +
+        allData['organisations'].map(o => `<option value="${o.id}" ${o.id===org.id?'selected':''}>${o.name}</option>`).join('');
+    }
+
+  } catch(e) {
+    showStatus('Failed to create client: ' + e.message, 'error');
+  }
+}
+
 // ── Auth ─────────────────────────────────────────────────
 async function loadLoginUsers() {
   try {
@@ -2046,6 +2357,16 @@ async function renderSettingsPage() {
           </div>
         </div>
       </div>
+      <div class="opp-section" style="margin-bottom:16px;">
+        <div class="opp-section-title">Duplicate Detection</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Similarity Warning Threshold (%)</label>
+            <input type="number" id="setting-similarity" class="form-control" min="50" max="100" value="${appSettings['similarity_threshold']||'80'}">
+            <div style="font-size:11px;color:var(--text3);margin-top:4px;">How similar two names must be before a duplicate warning is shown (50–100%). Lower = more warnings.</div>
+          </div>
+        </div>
+      </div>
       <div style="display:flex;justify-content:flex-end;">
         <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
       </div>
@@ -2058,13 +2379,16 @@ async function saveSettings() {
     const fyStart = document.getElementById('setting-fy-start').value;
     const escMonth = document.getElementById('setting-esc-month').value;
 
+    const similarity = document.getElementById('setting-similarity').value;
     await Promise.all([
       api('settings', 'PATCH', { value: fyStart, updated_at: new Date().toISOString() }, 'key=eq.fy_start_month'),
       api('settings', 'PATCH', { value: escMonth, updated_at: new Date().toISOString() }, 'key=eq.escalation_month'),
+      api('settings', 'PATCH', { value: similarity, updated_at: new Date().toISOString() }, 'key=eq.similarity_threshold'),
     ]);
 
     appSettings['fy_start_month'] = fyStart;
     appSettings['escalation_month'] = escMonth;
+    appSettings['similarity_threshold'] = similarity;
     showStatus('Settings saved');
   } catch(e) {
     showStatus('Failed to save: ' + e.message, 'error');
