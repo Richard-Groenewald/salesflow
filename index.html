@@ -195,7 +195,7 @@ tr:hover td{background:#F8FAFC;}
     <div id="login-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;" onclick="doLogin()">Sign In</button>
     <div style="margin-top:16px;font-size:11px;color:var(--text3);">Password disabled — test mode</div>
-    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.0</div>
+    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.1</div>
   </div>
 </div>
 
@@ -214,7 +214,7 @@ tr:hover td{background:#F8FAFC;}
       <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;" id="sidebar-user-role"></div>
       <div id="conn-status" class="conn-badge offline"><div class="conn-dot"></div> Offline</div>
       <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.0</div>
+        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.1</div>
         <button class="btn btn-sm" onclick="doLogout()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);border:none;font-size:11px;">Sign out</button>
       </div>
     </div>
@@ -272,6 +272,7 @@ tr:hover td{background:#F8FAFC;}
       <button class="opp-tab" onclick="switchOppTab('commercial', this)">Commercial</button>
       <button class="opp-tab" onclick="switchOppTab('collaborators', this)">Collaborators</button>
       <button class="opp-tab" onclick="switchOppTab('engagement', this)">Engagement</button>
+      <button class="opp-tab" onclick="switchOppTab('opp-contacts', this)">Opp Contacts</button>
       <button class="opp-tab" id="lost-tab" onclick="switchOppTab('lost', this)" style="display:none;">Lost</button>
     </div>
 
@@ -402,6 +403,17 @@ tr:hover td{background:#F8FAFC;}
       </div>
       <div id="engagement-list">
         <div style="text-align:center;padding:40px;color:var(--text3);">No engagements logged yet</div>
+      </div>
+    </div>
+
+    <!-- Opportunity Contacts Tab -->
+    <div class="opp-tab-content" id="opp-tab-opp-contacts">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:12px;gap:8px;">
+        <button class="btn btn-secondary btn-sm" onclick="openAddOppContactModal()">+ Add Contact</button>
+        <button class="btn btn-ghost btn-sm" onclick="openCreateOppContactModal()">+ Create New Person</button>
+      </div>
+      <div id="opp-contacts-list">
+        <div style="text-align:center;padding:40px;color:var(--text3);">No contacts added yet</div>
       </div>
     </div>
 
@@ -1284,6 +1296,7 @@ async function openNewOpportunity() {
   oppData = {};
   oppMonths = {};
   oppCollaborators = [];
+  oppContacts = [];
   if (window._engPeople) window._engPeople = [];
 
   // Reset all form fields
@@ -1358,6 +1371,7 @@ async function openOpportunity(id) {
     buildRevGrid();
     await displayOwner();
     await loadCollaborators(id);
+    await loadOppContacts(id);
   } catch(e) {
     showStatus('Failed to load deal: ' + e.message, 'error');
   }
@@ -1946,6 +1960,7 @@ async function saveOpportunity() {
     await saveRevenueStream(deal.id);
     // Save collaborators
     await saveCollaborators(deal.id);
+    await saveOppContacts(deal.id);
 
     closeOppPage();
     await renderOpportunitiesPage();
@@ -2295,6 +2310,381 @@ async function displayOwner() {
     ? [person.first_name, person.last_name].filter(Boolean).join(' ')
     : '—';
   if (ownerDisplayEl) ownerDisplayEl.style.display = 'flex';
+}
+
+
+// ── Opportunity Contacts ──────────────────────────────────
+let oppContacts = [];
+
+async function loadOppContacts(dealId) {
+  oppContacts = [];
+  if (!dealId) { renderOppContacts(); return; }
+  try {
+    const contacts = await apiGet('opportunity_contacts', `deal_id=eq.${dealId}&select=*`);
+    const people = allData['people'] || await apiGet('people', 'select=*');
+    const dmuRoles = allData['dmu_roles'] || await apiGet('dmu_roles', 'select=*');
+    allData['people'] = people;
+    allData['dmu_roles'] = dmuRoles;
+    contacts.forEach(c => {
+      const p = people.find(x => +x.id === +c.person_id);
+      const dmu = dmuRoles.find(x => +x.id === +c.dmu_role_id);
+      oppContacts.push({
+        id: c.id,
+        personId: c.person_id,
+        name: p ? [p.first_name, p.last_name].filter(Boolean).join(' ') : 'Unknown',
+        title: p?.title || '',
+        phone: p?.phone || '',
+        dmuRole: dmu?.name || '',
+        dmuRoleId: c.dmu_role_id,
+        note: c.note || '',
+      });
+    });
+  } catch(e) { console.warn('Could not load opp contacts:', e.message); }
+  renderOppContacts();
+}
+
+function renderOppContacts() {
+  const list = document.getElementById('opp-contacts-list');
+  if (!list) return;
+  if (!oppContacts.length) {
+    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3);">No contacts added yet</div>';
+    return;
+  }
+  list.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead><tr style="background:var(--bg);text-align:left;">
+        <th style="padding:8px 12px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;">Name</th>
+        <th style="padding:8px 12px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;">Title</th>
+        <th style="padding:8px 12px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;">Phone</th>
+        <th style="padding:8px 12px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;">DMU Role</th>
+        <th style="padding:8px 12px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;">Note</th>
+        <th style="padding:8px 12px;"></th>
+      </tr></thead>
+      <tbody>
+        ${oppContacts.map((c, i) => `
+          <tr style="border-top:1px solid var(--border);">
+            <td style="padding:10px 12px;font-weight:600;">${c.name}</td>
+            <td style="padding:10px 12px;color:var(--text2);">${c.title || '—'}</td>
+            <td style="padding:10px 12px;color:var(--text2);">${c.phone || '—'}</td>
+            <td style="padding:10px 12px;"><span class="badge badge-blue">${c.dmuRole || '—'}</span></td>
+            <td style="padding:10px 12px;color:var(--text2);font-size:12px;">${c.note || ''}</td>
+            <td style="padding:10px 12px;text-align:right;">
+              <button class="btn btn-ghost btn-sm" onclick="editOppContact(${i})">Edit</button>
+              <button class="btn btn-danger btn-sm" onclick="removeOppContact(${i})">Remove</button>
+            </td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+async function openAddOppContactModal(editIdx) {
+  const orgId = oppData?.org_id;
+  if (!orgId) { showStatus('Please select a client first', 'error'); return; }
+
+  // Load client-affiliated people excluding already-added contacts
+  const affiliations = await apiGet('person_organisation_roles', `org_id=eq.${orgId}&select=person_id`);
+  const affiliatedIds = affiliations.map(a => a.person_id);
+  const people = allData['people'] || await apiGet('people', 'select=*');
+  allData['people'] = people;
+  const dmuRoles = allData['dmu_roles'] || await apiGet('dmu_roles', 'active=eq.true&select=*&order=name.asc');
+  allData['dmu_roles'] = dmuRoles;
+
+  const existingIds = new Set(oppContacts.map(c => c.personId));
+  const pool = people.filter(p => affiliatedIds.includes(+p.id) && (editIdx !== undefined || !existingIds.has(+p.id)));
+
+  const editing = editIdx !== undefined ? oppContacts[editIdx] : null;
+
+  const html = `
+    <div class="modal-overlay" onmousedown="if(event.target===this)this._md=Date.now()" onclick="if(event.target===this&&Date.now()-this._md<300)closeModal()">
+      <div class="modal" style="width:520px;">
+        <div class="modal-header">
+          <div class="modal-title">${editing ? 'Edit' : 'Add'} Opportunity Contact</div>
+          <button class="modal-close" onclick="closeModal()">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Person <span style="color:var(--red)">*</span></label>
+            <select id="oc-person-id" class="form-control" ${editing ? 'disabled' : ''}>
+              <option value="">— select from client contacts —</option>
+              ${pool.map(p => `<option value="${p.id}" ${editing?.personId==p.id?'selected':''}>${[p.first_name,p.last_name].filter(Boolean).join(' ')}${p.title?' ('+p.title+')':''}</option>`).join('')}
+            </select>
+            ${!pool.length && !editing ? '<div style="font-size:12px;color:var(--text3);margin-top:4px;">No client contacts available — use "Create New Person" to add one</div>' : ''}
+          </div>
+          <div class="form-group">
+            <label class="form-label">DMU Role</label>
+            <select id="oc-dmu-role-id" class="form-control">
+              <option value="">— select role —</option>
+              ${dmuRoles.map(r => `<option value="${r.id}" ${editing?.dmuRoleId==r.id?'selected':''}>${r.name}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Note</label>
+            <textarea id="oc-note" class="form-control" rows="3">${editing?.note||''}</textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="saveOppContact(${editIdx ?? 'null'})">${editing ? 'Update' : 'Add'}</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('modal-root').innerHTML = html;
+}
+
+async function saveOppContact(editIdx) {
+  const personId = document.getElementById('oc-person-id')?.value;
+  const dmuRoleId = document.getElementById('oc-dmu-role-id')?.value || null;
+  const note = document.getElementById('oc-note')?.value || '';
+
+  if (!personId && editIdx === null) { showStatus('Please select a person', 'error'); return; }
+
+  const people = allData['people'] || [];
+  const dmuRoles = allData['dmu_roles'] || [];
+  const person = people.find(p => +p.id === +personId);
+  const dmu = dmuRoles.find(r => +r.id === +dmuRoleId);
+
+  if (editIdx !== null && editIdx !== undefined) {
+    // Update existing
+    const c = oppContacts[editIdx];
+    try {
+      await api('opportunity_contacts', 'PATCH', { dmu_role_id: dmuRoleId || null, note }, `id=eq.${c.id}`);
+      c.dmuRoleId = dmuRoleId;
+      c.dmuRole = dmu?.name || '';
+      c.note = note;
+      showStatus('Contact updated');
+    } catch(e) { showStatus('Failed: ' + e.message, 'error'); return; }
+  } else {
+    // Add new — save to DB if deal exists, otherwise queue
+    const entry = {
+      personId: +personId,
+      name: person ? [person.first_name, person.last_name].filter(Boolean).join(' ') : 'Unknown',
+      title: person?.title || '',
+      phone: person?.phone || '',
+      dmuRoleId: dmuRoleId || null,
+      dmuRole: dmu?.name || '',
+      note,
+      isNew: true,
+    };
+    if (oppData.id) {
+      try {
+        const result = await api('opportunity_contacts', 'POST', {
+          deal_id: oppData.id, person_id: +personId,
+          dmu_role_id: dmuRoleId || null, note,
+        }, 'select=*');
+        entry.id = result[0].id;
+        delete entry.isNew;
+      } catch(e) { showStatus('Failed: ' + e.message, 'error'); return; }
+    }
+    oppContacts.push(entry);
+    showStatus('Contact added');
+  }
+  renderOppContacts();
+  closeModal();
+}
+
+async function removeOppContact(idx) {
+  const c = oppContacts[idx];
+  if (!confirm('Remove this contact from the opportunity?')) return;
+  if (c.id) {
+    try {
+      await api('opportunity_contacts', 'DELETE', null, `id=eq.${c.id}`);
+    } catch(e) { showStatus('Failed: ' + e.message, 'error'); return; }
+  }
+  oppContacts.splice(idx, 1);
+  renderOppContacts();
+  showStatus('Contact removed');
+}
+
+function editOppContact(idx) {
+  openAddOppContactModal(idx);
+}
+
+async function openCreateOppContactModal() {
+  const orgId = oppData?.org_id;
+  const people = allData['people'] || await apiGet('people', 'select=*');
+  allData['people'] = people;
+  const dmuRoles = allData['dmu_roles'] || await apiGet('dmu_roles', 'active=eq.true&select=*&order=name.asc');
+  allData['dmu_roles'] = dmuRoles;
+
+  const html = `
+    <div class="modal-overlay" onmousedown="if(event.target===this)this._md=Date.now()" onclick="if(event.target===this&&Date.now()-this._md<300)closeModal()">
+      <div class="modal" style="width:540px;">
+        <div class="modal-header">
+          <div class="modal-title">Create New Contact</div>
+          <button class="modal-close" onclick="closeModal()">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="form-group" style="flex:0 0 80px;">
+              <label class="form-label">Title</label>
+              <select id="noc-title" class="form-control">
+                <option>—</option><option>Mr</option><option>Mrs</option><option>Ms</option><option>Dr</option><option>Prof</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">First Name <span style="color:var(--red)">*</span></label>
+              <input type="text" id="noc-first" class="form-control" oninput="checkNewOppContactSimilarity()">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Last Name <span style="color:var(--red)">*</span></label>
+              <input type="text" id="noc-last" class="form-control" oninput="checkNewOppContactSimilarity()">
+            </div>
+          </div>
+          <div id="noc-match" style="display:none;padding:10px 12px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:var(--radius);font-size:12px;margin-bottom:12px;"></div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Phone</label>
+              <input type="text" id="noc-phone" class="form-control">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Email</label>
+              <input type="email" id="noc-email" class="form-control">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">DMU Role</label>
+              <select id="noc-dmu-role-id" class="form-control">
+                <option value="">— select role —</option>
+                ${dmuRoles.map(r => `<option value="${r.id}">${r.name}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Note</label>
+              <input type="text" id="noc-note" class="form-control">
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--text3);padding:8px 0;">
+            This person will be automatically affiliated with the client organisation.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="saveNewOppContact()">Create & Add</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('modal-root').innerHTML = html;
+}
+
+let _nocCheckTimer;
+function checkNewOppContactSimilarity() {
+  clearTimeout(_nocCheckTimer);
+  _nocCheckTimer = setTimeout(() => {
+    const first = document.getElementById('noc-first')?.value || '';
+    const last = document.getElementById('noc-last')?.value || '';
+    const fullName = (first + ' ' + last).trim();
+    const matchEl = document.getElementById('noc-match');
+    if (!matchEl || fullName.length < 3) { if(matchEl) matchEl.style.display='none'; return; }
+    const people = allData['people'] || [];
+    const matches = findSimilar(fullName, people, p => [p.first_name, p.last_name].filter(Boolean).join(' '));
+    if (matches.length) {
+      matchEl.style.display = 'block';
+      matchEl.innerHTML = '🔍 Similar people found: ' +
+        matches.map(m => {
+          const name = [m.item.first_name, m.item.last_name].filter(Boolean).join(' ');
+          return `<strong>${name}</strong> (${m.score}% match) — <a href="#" onclick="useExistingOppContact(${m.item.id},'${name}');return false;" style="color:var(--red);">Use this person</a>`;
+        }).join(', ');
+    } else {
+      matchEl.style.display = 'none';
+    }
+  }, 400);
+}
+
+async function useExistingOppContact(personId, name) {
+  const orgId = oppData?.org_id;
+  // Check if affiliated with client
+  if (orgId) {
+    const affiliations = await apiGet('person_organisation_roles', `person_id=eq.${personId}&org_id=eq.${orgId}&select=id`);
+    if (!affiliations.length) {
+      // Auto-create affiliation
+      await api('person_organisation_roles', 'POST', {
+        person_id: personId, org_id: +orgId, role_type: 'Contact', is_primary: false
+      }, '');
+    }
+  }
+  const people = allData['people'] || [];
+  const person = people.find(p => +p.id === +personId);
+  oppContacts.push({
+    personId, name,
+    title: person?.title || '',
+    phone: person?.phone || '',
+    dmuRoleId: null, dmuRole: '', note: '', isNew: true,
+  });
+  renderOppContacts();
+  closeModal();
+  showStatus(name + ' added as opportunity contact');
+}
+
+async function saveNewOppContact() {
+  const first = document.getElementById('noc-first')?.value.trim();
+  const last = document.getElementById('noc-last')?.value.trim();
+  if (!first || !last) { showStatus('First and last name required', 'error'); return; }
+
+  const orgId = oppData?.org_id;
+  const dmuRoleId = document.getElementById('noc-dmu-role-id')?.value || null;
+  const note = document.getElementById('noc-note')?.value || '';
+  const dmuRoles = allData['dmu_roles'] || [];
+  const dmu = dmuRoles.find(r => +r.id === +dmuRoleId);
+
+  try {
+    const initials = ((first[0]||'') + (last[0]||'')).toUpperCase();
+    const personResult = await api('people', 'POST', {
+      first_name: first, last_name: last,
+      title: document.getElementById('noc-title')?.value || null,
+      email: document.getElementById('noc-email')?.value || null,
+      phone: document.getElementById('noc-phone')?.value || null,
+      initials,
+    }, 'select=*');
+    const person = personResult[0];
+    allData['people'] = null;
+
+    // Auto-affiliate with client
+    if (orgId) {
+      await api('person_organisation_roles', 'POST', {
+        person_id: person.id, org_id: +orgId, role_type: 'Contact', is_primary: false,
+      }, '');
+    }
+
+    const entry = {
+      personId: person.id,
+      name: [first, last].join(' '),
+      title: person.title || '',
+      phone: person.phone || '',
+      dmuRoleId: dmuRoleId || null,
+      dmuRole: dmu?.name || '',
+      note, isNew: true,
+    };
+
+    if (oppData.id) {
+      const result = await api('opportunity_contacts', 'POST', {
+        deal_id: oppData.id, person_id: person.id,
+        dmu_role_id: dmuRoleId || null, note,
+      }, 'select=*');
+      entry.id = result[0].id;
+      delete entry.isNew;
+    }
+
+    oppContacts.push(entry);
+    renderOppContacts();
+    closeModal();
+    showStatus([first, last].join(' ') + ' created and added');
+  } catch(e) {
+    showStatus('Failed: ' + e.message, 'error');
+  }
+}
+
+async function saveOppContacts(dealId) {
+  for (const c of oppContacts) {
+    if (!c.isNew) continue;
+    try {
+      await api('opportunity_contacts', 'POST', {
+        deal_id: dealId, person_id: c.personId,
+        dmu_role_id: c.dmuRoleId || null, note: c.note || '',
+      }, '');
+      delete c.isNew;
+    } catch(e) { console.warn('Could not save opp contact:', e.message); }
+  }
 }
 
 // ── Deal Collaborators ────────────────────────────────────
