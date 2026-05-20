@@ -195,7 +195,7 @@ tr:hover td{background:#F8FAFC;}
     <div id="login-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;" onclick="doLogin()">Sign In</button>
     <div style="margin-top:16px;font-size:11px;color:var(--text3);">Password disabled — test mode</div>
-    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.7</div>
+    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.8</div>
   </div>
 </div>
 
@@ -214,7 +214,7 @@ tr:hover td{background:#F8FAFC;}
       <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;" id="sidebar-user-role"></div>
       <div id="conn-status" class="conn-badge offline"><div class="conn-dot"></div> Offline</div>
       <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.7</div>
+        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.8</div>
         <button class="btn btn-sm" onclick="doLogout()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);border:none;font-size:11px;">Sign out</button>
       </div>
     </div>
@@ -471,6 +471,205 @@ tr:hover td{background:#F8FAFC;}
           <div class="rev-total-label">Weighted Value</div>
           <div class="rev-total-value" id="rev-weighted">R 0</div>
         </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Lead Form Page -->
+<div class="opp-page" id="lead-page">
+  <div class="opp-topbar">
+    <button class="btn btn-ghost btn-sm" onmousedown="this._md=Date.now()" onclick="if(Date.now()-this._md<300)closeLeadPage()">← Back</button>
+    <div class="opp-topbar-title" id="lead-page-title">New Lead</div>
+    <div style="flex:1;"></div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn btn-secondary btn-sm" onmousedown="this._md=Date.now()" onclick="if(Date.now()-this._md<300)closeLeadPage()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveLead()">Save</button>
+    </div>
+  </div>
+
+  <div class="opp-body">
+    <!-- Top Tabs -->
+    <div class="opp-tabs">
+      <button class="opp-tab active" onclick="switchLeadTab('overview', this)">Overview</button>
+      <button class="opp-tab" onclick="switchLeadTab('qualification', this)">Qualification</button>
+      <button class="opp-tab" onclick="switchLeadTab('interactions', this)">Interactions</button>
+    </div>
+
+    <!-- Overview Tab -->
+    <div class="opp-tab-content active" id="lead-tab-overview">
+      <div style="max-width:720px;">
+
+        <!-- Source section -->
+        <div class="opp-section">
+          <div class="opp-section-title">Source</div>
+
+          <div class="form-group">
+            <label class="form-label">Source <span style="color:var(--red)">*</span></label>
+            <select id="lead-source-id" class="form-control" onchange="onLeadSourceChange()">
+              <option value="">— select source —</option>
+            </select>
+          </div>
+
+          <!-- Conditional: Referral → person picker -->
+          <div class="form-group" id="lead-source-person-wrap" style="display:none;">
+            <label class="form-label">Referred by</label>
+            <select id="lead-source-person-id" class="form-control">
+              <option value="">— select person —</option>
+            </select>
+          </div>
+
+          <!-- Conditional: Client Expansion → org picker -->
+          <div class="form-group" id="lead-source-org-wrap" style="display:none;">
+            <label class="form-label">Expanding from client</label>
+            <select id="lead-source-org-id" class="form-control">
+              <option value="">— select client —</option>
+            </select>
+          </div>
+
+          <!-- Conditional: Research → campaign picker + create button -->
+          <div class="form-group" id="lead-source-campaign-wrap" style="display:none;">
+            <label class="form-label">Research Campaign</label>
+            <div style="display:flex;gap:8px;">
+              <select id="lead-research-campaign-id" class="form-control" style="flex:1;">
+                <option value="">— select campaign —</option>
+              </select>
+              <button class="btn btn-sm" onclick="openNewResearchCampaignFromLead()" style="white-space:nowrap;background:var(--navy);color:white;flex-shrink:0;">+ Create New</button>
+            </div>
+          </div>
+
+          <!-- Conditional: free text source detail (for Inbound, Outbound, Tender, Other) -->
+          <div class="form-group" id="lead-source-detail-wrap" style="display:none;">
+            <label class="form-label">Source detail</label>
+            <input type="text" id="lead-source-detail" class="form-control" placeholder="e.g. LinkedIn, website form, RFP reference">
+          </div>
+        </div>
+
+        <!-- Target section -->
+        <div class="opp-section">
+          <div class="opp-section-title">Target Client</div>
+
+          <div class="form-group">
+            <label class="form-label">Target organisation</label>
+            <div style="display:flex;gap:8px;">
+              <select id="lead-target-org-id" class="form-control" style="flex:1;" onchange="onLeadTargetOrgChange()">
+                <option value="">— pick existing or enter name below —</option>
+              </select>
+            </div>
+            <input type="text" id="lead-target-org-name" class="form-control" placeholder="Or type org name (use this if not yet a known client)" style="margin-top:8px;">
+            <div style="font-size:11px;color:var(--text3);margin-top:4px;">Pick an existing organisation, OR type a name in the second field for new prospects.</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Target contact person</label>
+            <select id="lead-target-person-id" class="form-control" onchange="onLeadTargetPersonChange()">
+              <option value="">— pick existing or enter name below —</option>
+            </select>
+            <input type="text" id="lead-target-person-name" class="form-control" placeholder="Or type contact name" style="margin-top:8px;">
+          </div>
+        </div>
+
+        <!-- Details section -->
+        <div class="opp-section">
+          <div class="opp-section-title">Details</div>
+
+          <div class="form-group">
+            <label class="form-label">Description <span style="color:var(--red)">*</span></label>
+            <textarea id="lead-description" class="form-control" rows="4" placeholder="What's the opportunity here? Why is this a lead?"></textarea>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Region</label>
+              <select id="lead-region-id" class="form-control">
+                <option value="">— select —</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Service focus</label>
+              <select id="lead-service-major-id" class="form-control">
+                <option value="">— select —</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Estimated annual value (ZAR)</label>
+            <input type="number" id="lead-est-value" class="form-control" placeholder="Back-of-envelope estimate, optional" step="1000">
+          </div>
+        </div>
+
+        <!-- Workflow section -->
+        <div class="opp-section">
+          <div class="opp-section-title">Workflow</div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Owner</label>
+              <select id="lead-owner-id" class="form-control">
+                <option value="">— shared pool —</option>
+              </select>
+              <div style="font-size:11px;color:var(--text3);margin-top:4px;">Leave blank to put this lead in the shared pool.</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Status <span style="color:var(--red)">*</span></label>
+              <select id="lead-status" class="form-control" onchange="onLeadStatusChange()">
+                <option value="New">New</option>
+                <option value="Working">Working</option>
+                <option value="Qualified">Qualified</option>
+                <option value="Disqualified">Disqualified</option>
+                <option value="Dormant">Dormant</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group" id="lead-disqualified-reason-wrap" style="display:none;">
+            <label class="form-label">Disqualified reason</label>
+            <input type="text" id="lead-disqualified-reason" class="form-control" placeholder="Why was this disqualified?">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Next action</label>
+              <input type="text" id="lead-next-action" class="form-control" placeholder="What's the next step?">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Next action date</label>
+              <input type="date" id="lead-next-action-date" class="form-control">
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Qualification Tab -->
+    <div class="opp-tab-content" id="lead-tab-qualification">
+      <div style="max-width:720px;">
+        <div class="opp-section">
+          <div class="opp-section-title">Qualification Dimensions</div>
+          <div style="font-size:13px;color:var(--text2);margin-bottom:20px;">
+            For each dimension, click the dots to cycle: <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#cbd5e1;vertical-align:middle;"></span> Unknown → <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b;vertical-align:middle;"></span> Weak → <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#16a34a;vertical-align:middle;"></span> Strong.
+          </div>
+
+          <div id="lead-qual-rows"></div>
+
+          <div style="margin-top:24px;padding:16px;background:var(--bg);border-radius:var(--radius);border:1px solid var(--border);">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:8px;">Readiness</div>
+            <div id="lead-qual-readiness" style="font-size:14px;font-weight:600;">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Interactions Tab -->
+    <div class="opp-tab-content" id="lead-tab-interactions">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+        <button class="btn btn-primary btn-sm" onclick="openLeadInteractionModal()">+ Log Interaction</button>
+      </div>
+      <div id="lead-interactions-list">
+        <div style="text-align:center;padding:40px;color:var(--text3);">No interactions logged yet</div>
       </div>
     </div>
 
@@ -897,10 +1096,10 @@ function showPage(page) {
     addBtn.onclick = () => openNewOpportunity();
     addBtn.textContent = '+ New Opportunity';
   } else if (page === 'leads') {
-    addBtn.onclick = () => alert('Lead capture form coming in Increment 2 (v7.6.8). For now, leads can be added via Supabase directly.');
+    addBtn.onclick = () => openNewLead();
     addBtn.textContent = '+ New Lead';
   } else if (page === 'research_campaigns') {
-    addBtn.onclick = () => alert('Research Campaign form coming in Increment 2 (v7.6.8). For now, campaigns can be added via Supabase directly.');
+    addBtn.onclick = () => openNewResearchCampaign();
     addBtn.textContent = '+ New Campaign';
   } else if (page === 'role_permissions') {
     addBtn.style.display = 'none';
@@ -3541,9 +3740,9 @@ function renderLeadRow(l, sources, regions, people, orgs) {
   </tr>`;
 }
 
-// Stub for opening a lead — Increment 2 will replace this with the form
+// Open an existing lead for editing
 function openLead(id) {
-  alert('Lead detail/edit form coming in Increment 2 (v7.6.8).');
+  openLeadForm(id);
 }
 
 
@@ -3603,9 +3802,613 @@ async function renderResearchCampaignsPage() {
   }
 }
 
-// Stub for opening a research campaign — Increment 2 will replace this
+// Open an existing research campaign for editing
 function openResearchCampaign(id) {
-  alert('Research Campaign detail/edit form coming in Increment 2 (v7.6.8).');
+  openResearchCampaignModal(id);
+}
+
+
+// ── Lead Form ─────────────────────────────────────────────
+// State for the currently open lead
+let leadData = {};
+let leadInteractions = [];
+
+async function openNewLead() {
+  leadData = {};
+  leadInteractions = [];
+  resetLeadForm();
+  await initLeadForm();
+  // Default status = New (already in select)
+  // Default owner = current user
+  const ownerSel = document.getElementById('lead-owner-id');
+  if (ownerSel && currentUser?.personId) ownerSel.value = currentUser.personId;
+  document.getElementById('lead-page-title').textContent = 'New Lead';
+  document.getElementById('lead-page').classList.add('active');
+  switchLeadTab('overview', document.querySelector('#lead-page .opp-tab'));
+  renderLeadQualification();
+  renderLeadInteractions();
+}
+
+async function openLeadForm(id) {
+  try {
+    const rows = await apiGet('leads', 'id=eq.' + id + '&select=*');
+    leadData = rows[0] || { id };
+    resetLeadForm();
+    await initLeadForm();
+    // Populate fields from leadData
+    populateLeadForm();
+    await loadLeadInteractions(id);
+    document.getElementById('lead-page-title').textContent = 'Edit Lead';
+    document.getElementById('lead-page').classList.add('active');
+    switchLeadTab('overview', document.querySelector('#lead-page .opp-tab'));
+    renderLeadQualification();
+    renderLeadInteractions();
+  } catch(e) {
+    showStatus('Failed to load lead: ' + e.message, 'error');
+  }
+}
+
+function closeLeadPage() {
+  document.getElementById('lead-page').classList.remove('active');
+}
+
+function switchLeadTab(tab, btn) {
+  document.querySelectorAll('#lead-page .opp-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('#lead-page .opp-tab-content').forEach(t => t.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const el = document.getElementById('lead-tab-' + tab);
+  if (el) el.classList.add('active');
+}
+
+function resetLeadForm() {
+  const ids = [
+    'lead-source-id','lead-source-person-id','lead-source-org-id','lead-research-campaign-id',
+    'lead-source-detail','lead-target-org-id','lead-target-org-name','lead-target-person-id',
+    'lead-target-person-name','lead-description','lead-region-id','lead-service-major-id',
+    'lead-est-value','lead-owner-id','lead-status','lead-disqualified-reason',
+    'lead-next-action','lead-next-action-date'
+  ];
+  ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  // Status defaults to New
+  const statusEl = document.getElementById('lead-status');
+  if (statusEl) statusEl.value = 'New';
+  // Hide conditional sections
+  ['lead-source-person-wrap','lead-source-org-wrap','lead-source-campaign-wrap',
+   'lead-source-detail-wrap','lead-disqualified-reason-wrap'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.style.display = 'none';
+  });
+}
+
+async function initLeadForm() {
+  // Load all needed lookups in parallel
+  const [sources, regions, services, people, orgs, campaigns] = await Promise.all([
+    allData['lead_sources']       || apiGet('lead_sources', 'active=eq.true&select=*&order=id.asc'),
+    allData['regions']            || apiGet('regions', 'active=eq.true&select=*&order=name.asc'),
+    allData['service_major']      || apiGet('service_major', 'active=eq.true&select=*&order=name.asc'),
+    allData['people']             || apiGet('people', 'select=*&order=first_name.asc'),
+    allData['organisations']      || apiGet('organisations', 'select=*&order=name.asc'),
+    apiGet('research_campaigns', 'status=eq.Active&select=*&order=name.asc'),
+  ]);
+  allData['lead_sources']        = sources;
+  allData['regions']             = regions;
+  allData['service_major']       = services;
+  allData['people']              = people;
+  allData['organisations']       = orgs;
+  allData['research_campaigns']  = campaigns;
+
+  // Populate dropdowns
+  const sourceSel = document.getElementById('lead-source-id');
+  sourceSel.innerHTML = '<option value="">— select source —</option>' +
+    sources.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+
+  const regionSel = document.getElementById('lead-region-id');
+  regionSel.innerHTML = '<option value="">— select —</option>' +
+    regions.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+
+  const serviceSel = document.getElementById('lead-service-major-id');
+  serviceSel.innerHTML = '<option value="">— select —</option>' +
+    services.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+
+  // Owner: Xone people if available, else all
+  const xonePeople = people.filter(p => p.is_xone);
+  const ownerPool = xonePeople.length ? xonePeople : people;
+  const ownerSel = document.getElementById('lead-owner-id');
+  ownerSel.innerHTML = '<option value="">— shared pool —</option>' +
+    ownerPool.map(p => {
+      const name = [p.first_name, p.last_name].filter(Boolean).join(' ');
+      return `<option value="${p.id}">${name}</option>`;
+    }).join('');
+
+  // Source-person picker: all people
+  const srcPersonSel = document.getElementById('lead-source-person-id');
+  srcPersonSel.innerHTML = '<option value="">— select person —</option>' +
+    people.map(p => {
+      const name = [p.first_name, p.last_name].filter(Boolean).join(' ');
+      return `<option value="${p.id}">${name}</option>`;
+    }).join('');
+
+  // Source-org picker: all orgs
+  const srcOrgSel = document.getElementById('lead-source-org-id');
+  srcOrgSel.innerHTML = '<option value="">— select client —</option>' +
+    orgs.map(o => `<option value="${o.id}">${o.name}</option>`).join('');
+
+  // Research campaign picker
+  const campaignSel = document.getElementById('lead-research-campaign-id');
+  campaignSel.innerHTML = '<option value="">— select campaign —</option>' +
+    campaigns.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+
+  // Target-org picker: all orgs
+  const tgtOrgSel = document.getElementById('lead-target-org-id');
+  tgtOrgSel.innerHTML = '<option value="">— pick existing or enter name below —</option>' +
+    orgs.map(o => `<option value="${o.id}">${o.name}</option>`).join('');
+
+  // Target-person picker: all people
+  const tgtPersonSel = document.getElementById('lead-target-person-id');
+  tgtPersonSel.innerHTML = '<option value="">— pick existing or enter name below —</option>' +
+    people.map(p => {
+      const name = [p.first_name, p.last_name].filter(Boolean).join(' ');
+      return `<option value="${p.id}">${name}</option>`;
+    }).join('');
+}
+
+function populateLeadForm() {
+  // Source
+  if (leadData.source_id) document.getElementById('lead-source-id').value = leadData.source_id;
+  if (leadData.source_person_id) document.getElementById('lead-source-person-id').value = leadData.source_person_id;
+  if (leadData.source_org_id) document.getElementById('lead-source-org-id').value = leadData.source_org_id;
+  if (leadData.research_campaign_id) document.getElementById('lead-research-campaign-id').value = leadData.research_campaign_id;
+  if (leadData.source_detail) document.getElementById('lead-source-detail').value = leadData.source_detail;
+  // Target
+  if (leadData.target_org_id) document.getElementById('lead-target-org-id').value = leadData.target_org_id;
+  if (leadData.target_org_name) document.getElementById('lead-target-org-name').value = leadData.target_org_name;
+  if (leadData.target_person_id) document.getElementById('lead-target-person-id').value = leadData.target_person_id;
+  if (leadData.target_person_name) document.getElementById('lead-target-person-name').value = leadData.target_person_name;
+  // Details
+  if (leadData.description) document.getElementById('lead-description').value = leadData.description;
+  if (leadData.region_id) document.getElementById('lead-region-id').value = leadData.region_id;
+  if (leadData.service_major_id) document.getElementById('lead-service-major-id').value = leadData.service_major_id;
+  if (leadData.est_value != null) document.getElementById('lead-est-value').value = leadData.est_value;
+  // Workflow
+  if (leadData.owner_id) document.getElementById('lead-owner-id').value = leadData.owner_id;
+  if (leadData.status) document.getElementById('lead-status').value = leadData.status;
+  if (leadData.disqualified_reason) document.getElementById('lead-disqualified-reason').value = leadData.disqualified_reason;
+  if (leadData.next_action) document.getElementById('lead-next-action').value = leadData.next_action;
+  if (leadData.next_action_date) document.getElementById('lead-next-action-date').value = leadData.next_action_date;
+  // Trigger conditional reveals
+  onLeadSourceChange();
+  onLeadStatusChange();
+}
+
+function onLeadSourceChange() {
+  const sourceId = document.getElementById('lead-source-id').value;
+  const sources = allData['lead_sources'] || [];
+  const source = sources.find(s => +s.id === +sourceId);
+  const name = source?.name || '';
+
+  const personWrap = document.getElementById('lead-source-person-wrap');
+  const orgWrap = document.getElementById('lead-source-org-wrap');
+  const campaignWrap = document.getElementById('lead-source-campaign-wrap');
+  const detailWrap = document.getElementById('lead-source-detail-wrap');
+
+  // Hide all conditional wraps first
+  personWrap.style.display = 'none';
+  orgWrap.style.display = 'none';
+  campaignWrap.style.display = 'none';
+  detailWrap.style.display = 'none';
+
+  // Show the relevant one
+  if (name === 'Referral') personWrap.style.display = '';
+  else if (name === 'Client Expansion') orgWrap.style.display = '';
+  else if (name === 'Research') campaignWrap.style.display = '';
+  else if (name) detailWrap.style.display = ''; // Inbound, Outbound, Tender, Other
+}
+
+function onLeadTargetOrgChange() {
+  // If user picks an org from the dropdown, clear the free-text name field
+  // (the FK takes precedence)
+  const orgId = document.getElementById('lead-target-org-id').value;
+  if (orgId) {
+    const nameField = document.getElementById('lead-target-org-name');
+    if (nameField) nameField.value = '';
+  }
+}
+
+function onLeadTargetPersonChange() {
+  // Same logic as org: FK wins, clear the free-text fallback
+  const personId = document.getElementById('lead-target-person-id').value;
+  if (personId) {
+    const nameField = document.getElementById('lead-target-person-name');
+    if (nameField) nameField.value = '';
+  }
+}
+
+function onLeadStatusChange() {
+  const status = document.getElementById('lead-status').value;
+  const wrap = document.getElementById('lead-disqualified-reason-wrap');
+  wrap.style.display = (status === 'Disqualified') ? '' : 'none';
+}
+
+// ── Qualification dots ────────────────────────────────────
+const QUAL_DIMENSIONS = [
+  { key: 'fit',           label: 'Fit',      help: 'Are they in your ideal client profile? (sector, size, region you serve)' },
+  { key: 'trigger_score', label: 'Trigger',  help: 'Is there a reason now? (new site, incident, renewal coming up, change of FM)' },
+  { key: 'access',        label: 'Access',   help: 'Can you actually get in front of a decision-maker?' },
+  { key: 'capacity',      label: 'Capacity', help: 'Can you serve them if you win? (region coverage, manpower vs tech)' },
+];
+
+function renderLeadQualification() {
+  const wrap = document.getElementById('lead-qual-rows');
+  if (!wrap) return;
+  wrap.innerHTML = QUAL_DIMENSIONS.map(d => {
+    const val = leadData[d.key] || 0;
+    return `<div style="display:flex;align-items:center;gap:16px;padding:14px;border-bottom:1px solid var(--border);">
+      <div style="flex:1;">
+        <div style="font-size:14px;font-weight:700;color:var(--text);">${d.label}</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px;">${d.help}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0;">
+        ${[0,1,2].map(level => {
+          const isActive = +val === level;
+          const colour = level === 2 ? '#16a34a' : level === 1 ? '#f59e0b' : '#cbd5e1';
+          const ring = isActive ? `box-shadow:0 0 0 3px ${colour}33;` : '';
+          return `<button onclick="setLeadQual('${d.key}', ${level})" title="${level===2?'Strong':level===1?'Weak':'Unknown'}" style="width:24px;height:24px;border-radius:50%;background:${colour};border:none;cursor:pointer;${ring}opacity:${isActive?'1':'0.4'};transition:all 0.15s;"></button>`;
+        }).join('')}
+      </div>
+      <div style="width:80px;text-align:right;font-size:12px;font-weight:600;color:${val===2?'#16a34a':val===1?'#f59e0b':'var(--text3)'};">
+        ${val===2?'Strong':val===1?'Weak':'Unknown'}
+      </div>
+    </div>`;
+  }).join('');
+  updateLeadReadiness();
+}
+
+function setLeadQual(key, level) {
+  leadData[key] = level;
+  renderLeadQualification();
+}
+
+function updateLeadReadiness() {
+  const el = document.getElementById('lead-qual-readiness');
+  if (!el) return;
+  const scores = QUAL_DIMENSIONS.map(d => +leadData[d.key] || 0);
+  const allStrong = scores.every(s => s === 2);
+  const anyUnknown = scores.some(s => s === 0);
+  if (allStrong) {
+    el.innerHTML = '<span style="color:#16a34a;">✓ Ready to qualify</span> <span style="font-weight:400;color:var(--text3);font-size:12px;">— consider moving status to Qualified</span>';
+  } else if (anyUnknown) {
+    const missing = QUAL_DIMENSIONS.filter((d,i) => scores[i] === 0).map(d => d.label).join(', ');
+    el.innerHTML = `<span style="color:var(--text3);">Still assessing</span> <span style="font-weight:400;color:var(--text3);font-size:12px;">— unknown: ${missing}</span>`;
+  } else {
+    const weak = QUAL_DIMENSIONS.filter((d,i) => scores[i] === 1).map(d => d.label).join(', ');
+    el.innerHTML = `<span style="color:#f59e0b;">Mixed signals</span> <span style="font-weight:400;color:var(--text3);font-size:12px;">— weak: ${weak}</span>`;
+  }
+}
+
+// ── Save lead ─────────────────────────────────────────────
+async function saveLead() {
+  const sourceId = document.getElementById('lead-source-id').value;
+  const description = document.getElementById('lead-description').value.trim();
+  const status = document.getElementById('lead-status').value;
+
+  if (!sourceId) { showStatus('Source is required', 'error'); switchLeadTab('overview', document.querySelector('#lead-page .opp-tab')); return; }
+  if (!description) { showStatus('Description is required', 'error'); switchLeadTab('overview', document.querySelector('#lead-page .opp-tab')); return; }
+  if (!status) { showStatus('Status is required', 'error'); switchLeadTab('overview', document.querySelector('#lead-page .opp-tab')); return; }
+
+  // Build payload — only include source-specific FK based on source type
+  const sources = allData['lead_sources'] || [];
+  const source = sources.find(s => +s.id === +sourceId);
+  const sourceName = source?.name || '';
+
+  const payload = {
+    source_id: +sourceId,
+    source_person_id: sourceName === 'Referral'         ? (+document.getElementById('lead-source-person-id').value || null) : null,
+    source_org_id:    sourceName === 'Client Expansion' ? (+document.getElementById('lead-source-org-id').value || null) : null,
+    research_campaign_id: sourceName === 'Research'     ? (+document.getElementById('lead-research-campaign-id').value || null) : null,
+    source_detail: (sourceName !== 'Referral' && sourceName !== 'Client Expansion' && sourceName !== 'Research')
+      ? (document.getElementById('lead-source-detail').value.trim() || null) : null,
+
+    target_org_id:      +document.getElementById('lead-target-org-id').value || null,
+    target_org_name:    document.getElementById('lead-target-org-name').value.trim() || null,
+    target_person_id:   +document.getElementById('lead-target-person-id').value || null,
+    target_person_name: document.getElementById('lead-target-person-name').value.trim() || null,
+
+    description,
+    region_id:        +document.getElementById('lead-region-id').value || null,
+    service_major_id: +document.getElementById('lead-service-major-id').value || null,
+    est_value:        document.getElementById('lead-est-value').value !== '' ? +document.getElementById('lead-est-value').value : null,
+
+    fit:           +leadData.fit || 0,
+    trigger_score: +leadData.trigger_score || 0,
+    access:        +leadData.access || 0,
+    capacity:      +leadData.capacity || 0,
+
+    status,
+    disqualified_reason: status === 'Disqualified' ? (document.getElementById('lead-disqualified-reason').value.trim() || null) : null,
+
+    owner_id: +document.getElementById('lead-owner-id').value || null,
+
+    next_action:      document.getElementById('lead-next-action').value.trim() || null,
+    next_action_date: document.getElementById('lead-next-action-date').value || null,
+
+    updated_at: new Date().toISOString(),
+  };
+
+  try {
+    if (leadData.id) {
+      const result = await api('leads', 'PATCH', payload, 'id=eq.' + leadData.id + '&select=*');
+      leadData = result[0];
+      showStatus('Lead updated');
+    } else {
+      payload.created_by = currentUser?.personId || null;
+      const result = await api('leads', 'POST', payload, 'select=*');
+      leadData = result[0];
+      showStatus('Lead created');
+    }
+    closeLeadPage();
+    // Refresh the list
+    if (currentPage === 'leads') await renderLeadsPage();
+  } catch(e) {
+    showStatus('Save failed: ' + e.message, 'error');
+  }
+}
+
+
+// ── Lead Interactions ─────────────────────────────────────
+async function loadLeadInteractions(leadId) {
+  if (!leadId) { leadInteractions = []; return; }
+  try {
+    leadInteractions = await apiGet('lead_interactions',
+      `lead_id=eq.${leadId}&select=*&order=engagement_date.desc,created_at.desc`);
+  } catch(e) {
+    leadInteractions = [];
+    console.warn('Could not load lead interactions:', e.message);
+  }
+}
+
+function renderLeadInteractions() {
+  const list = document.getElementById('lead-interactions-list');
+  if (!list) return;
+  if (!leadInteractions.length) {
+    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3);">No interactions logged yet</div>';
+    return;
+  }
+  const people = allData['people'] || [];
+  list.innerHTML = leadInteractions.map(i => {
+    const author = people.find(p => +p.id === +i.created_by);
+    const authorName = author ? [author.first_name, author.last_name].filter(Boolean).join(' ') : '';
+    return `<div class="eng-entry">
+      <div class="eng-entry-header">
+        <span class="eng-entry-date">${i.engagement_date}</span>
+        <span class="eng-badge">${i.engagement_type || ''}</span>
+        ${authorName ? `<span style="color:var(--text2);font-size:12px;">${authorName}</span>` : ''}
+      </div>
+      ${i.notes ? `<div style="font-size:13px;">${i.notes}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function openLeadInteractionModal() {
+  if (!leadData.id) {
+    showStatus('Save the lead first before logging interactions', 'error');
+    return;
+  }
+  const html = `
+    <div class="modal-overlay" onmousedown="if(event.target===this)this._md=Date.now()" onclick="if(event.target===this&&Date.now()-this._md<300)closeModal()">
+      <div class="modal" style="width:520px;">
+        <div class="modal-header">
+          <div class="modal-title">Log Lead Interaction</div>
+          <button class="modal-close" onclick="closeModal()">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Date</label>
+              <input type="date" id="li-date" class="form-control" value="${new Date().toISOString().slice(0,10)}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Type</label>
+              <select id="li-type" class="form-control">
+                <option>Call</option><option>Email</option><option>Meeting</option>
+                <option>Site Visit</option><option>Note</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Notes</label>
+            <textarea id="li-notes" class="form-control" rows="4" placeholder="What happened?"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="saveLeadInteraction()">Save</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('modal-root').innerHTML = html;
+}
+
+async function saveLeadInteraction() {
+  const date = document.getElementById('li-date').value;
+  const type = document.getElementById('li-type').value;
+  const notes = document.getElementById('li-notes').value.trim();
+  if (!date) { showStatus('Date is required', 'error'); return; }
+  if (!type) { showStatus('Type is required', 'error'); return; }
+  try {
+    await api('lead_interactions', 'POST', {
+      lead_id: leadData.id,
+      engagement_date: date,
+      engagement_type: type,
+      notes: notes || null,
+      created_by: currentUser?.personId || null,
+    }, '');
+    // Also bump last_touch_date on the lead
+    await api('leads', 'PATCH', { last_touch_date: date, updated_at: new Date().toISOString() }, 'id=eq.' + leadData.id);
+    leadData.last_touch_date = date;
+    closeModal();
+    showStatus('Interaction logged');
+    await loadLeadInteractions(leadData.id);
+    renderLeadInteractions();
+  } catch(e) {
+    showStatus('Failed: ' + e.message, 'error');
+  }
+}
+
+
+// ── Research Campaign Modal ───────────────────────────────
+let researchCampaignData = {};
+// Tracks where the modal was opened from, so we can refresh that view on save
+let researchCampaignReturnContext = 'page'; // 'page' or 'lead'
+
+async function openNewResearchCampaign() {
+  researchCampaignData = {};
+  researchCampaignReturnContext = 'page';
+  await renderResearchCampaignModal();
+}
+
+async function openNewResearchCampaignFromLead() {
+  researchCampaignData = {};
+  researchCampaignReturnContext = 'lead';
+  await renderResearchCampaignModal();
+}
+
+async function openResearchCampaignModal(id) {
+  researchCampaignReturnContext = 'page';
+  try {
+    const rows = await apiGet('research_campaigns', 'id=eq.' + id + '&select=*');
+    researchCampaignData = rows[0] || { id };
+    await renderResearchCampaignModal();
+  } catch(e) {
+    showStatus('Failed to load campaign: ' + e.message, 'error');
+  }
+}
+
+async function renderResearchCampaignModal() {
+  // Load lookups if not cached
+  const [regions, services, people] = await Promise.all([
+    allData['regions']       || apiGet('regions', 'active=eq.true&select=*&order=name.asc'),
+    allData['service_major'] || apiGet('service_major', 'active=eq.true&select=*&order=name.asc'),
+    allData['people']        || apiGet('people', 'select=*&order=first_name.asc'),
+  ]);
+  allData['regions']       = regions;
+  allData['service_major'] = services;
+  allData['people']        = people;
+
+  const xonePeople = people.filter(p => p.is_xone);
+  const ownerPool = xonePeople.length ? xonePeople : people;
+
+  const isEdit = !!researchCampaignData.id;
+  const title = isEdit ? 'Edit Research Campaign' : 'New Research Campaign';
+  const d = researchCampaignData;
+
+  const html = `
+    <div class="modal-overlay" onmousedown="if(event.target===this)this._md=Date.now()" onclick="if(event.target===this&&Date.now()-this._md<300)closeModal()">
+      <div class="modal" style="width:560px;">
+        <div class="modal-header">
+          <div class="modal-title">${title}</div>
+          <button class="modal-close" onclick="closeModal()">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Campaign name <span style="color:var(--red)">*</span></label>
+            <input type="text" id="rc-name" class="form-control" value="${(d.name||'').replace(/"/g,'&quot;')}" placeholder="e.g. Q3 Limpopo mining outreach">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Target segment</label>
+            <input type="text" id="rc-segment" class="form-control" value="${(d.segment||'').replace(/"/g,'&quot;')}" placeholder="Who are you targeting? e.g. Mid-tier mining houses in Limpopo">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Region</label>
+              <select id="rc-region-id" class="form-control">
+                <option value="">— select —</option>
+                ${regions.map(r => `<option value="${r.id}" ${d.region_id==r.id?'selected':''}>${r.name}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Service focus</label>
+              <select id="rc-service-major-id" class="form-control">
+                <option value="">— select —</option>
+                ${services.map(s => `<option value="${s.id}" ${d.service_major_id==s.id?'selected':''}>${s.name}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Status</label>
+              <select id="rc-status" class="form-control">
+                ${['Active','Paused','Completed','Abandoned'].map(s => `<option value="${s}" ${(d.status||'Active')==s?'selected':''}>${s}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Owner</label>
+              <select id="rc-owner-id" class="form-control">
+                <option value="">— unassigned —</option>
+                ${ownerPool.map(p => {
+                  const name = [p.first_name,p.last_name].filter(Boolean).join(' ');
+                  const sel = (d.owner_id||currentUser?.personId)==p.id?'selected':'';
+                  return `<option value="${p.id}" ${sel}>${name}</option>`;
+                }).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Notes</label>
+            <textarea id="rc-notes" class="form-control" rows="3" placeholder="Approach, target list, talking points…">${d.notes||''}</textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="saveResearchCampaign()">${isEdit?'Update':'Create'}</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('modal-root').innerHTML = html;
+}
+
+async function saveResearchCampaign() {
+  const name = document.getElementById('rc-name').value.trim();
+  if (!name) { showStatus('Campaign name is required', 'error'); return; }
+  const payload = {
+    name,
+    segment: document.getElementById('rc-segment').value.trim() || null,
+    region_id: +document.getElementById('rc-region-id').value || null,
+    service_major_id: +document.getElementById('rc-service-major-id').value || null,
+    status: document.getElementById('rc-status').value,
+    notes: document.getElementById('rc-notes').value.trim() || null,
+    owner_id: +document.getElementById('rc-owner-id').value || null,
+  };
+  try {
+    let saved;
+    if (researchCampaignData.id) {
+      const result = await api('research_campaigns', 'PATCH', payload, 'id=eq.' + researchCampaignData.id + '&select=*');
+      saved = result[0];
+      showStatus('Campaign updated');
+    } else {
+      payload.created_by = currentUser?.personId || null;
+      const result = await api('research_campaigns', 'POST', payload, 'select=*');
+      saved = result[0];
+      showStatus('Campaign created');
+    }
+    // Refresh the campaigns cache so the lead form picker stays current
+    allData['research_campaigns'] = null;
+    closeModal();
+    // Where do we go next?
+    if (researchCampaignReturnContext === 'lead') {
+      // Reload campaigns dropdown on the lead form and select the just-saved one
+      const fresh = await apiGet('research_campaigns', 'status=eq.Active&select=*&order=name.asc');
+      allData['research_campaigns'] = fresh;
+      const sel = document.getElementById('lead-research-campaign-id');
+      if (sel) {
+        sel.innerHTML = '<option value="">— select campaign —</option>' +
+          fresh.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        sel.value = saved.id;
+      }
+    } else if (currentPage === 'research_campaigns') {
+      await renderResearchCampaignsPage();
+    }
+  } catch(e) {
+    showStatus('Save failed: ' + e.message, 'error');
+  }
 }
 
 
