@@ -96,6 +96,7 @@ tr:hover td{background:#F8FAFC;}
 .form-label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px;letter-spacing:0.02em;}
 .form-control{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg2);color:var(--text);transition:border-color 0.15s;}
 .form-control:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3px rgba(208,2,27,0.08);}
+.form-control.field-error{border-color:var(--red);background:#FEF2F2;box-shadow:0 0 0 3px rgba(208,2,27,0.12);}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
 .form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;}
 
@@ -195,7 +196,7 @@ tr:hover td{background:#F8FAFC;}
     <div id="login-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;" onclick="doLogin()">Sign In</button>
     <div style="margin-top:16px;font-size:11px;color:var(--text3);">Password disabled — test mode</div>
-    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.8</div>
+    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.9</div>
   </div>
 </div>
 
@@ -214,7 +215,7 @@ tr:hover td{background:#F8FAFC;}
       <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;" id="sidebar-user-role"></div>
       <div id="conn-status" class="conn-badge offline"><div class="conn-dot"></div> Offline</div>
       <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.8</div>
+        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.9</div>
         <button class="btn btn-sm" onclick="doLogout()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);border:none;font-size:11px;">Sign out</button>
       </div>
     </div>
@@ -4085,14 +4086,37 @@ function updateLeadReadiness() {
 }
 
 // ── Save lead ─────────────────────────────────────────────
+// Helper: clear all error highlights on the lead form
+function clearLeadFieldErrors() {
+  document.querySelectorAll('#lead-page .field-error').forEach(el => el.classList.remove('field-error'));
+}
+
+// Helper: highlight a field as invalid, scroll to it, focus it, and surface the error toast.
+// Always switches to the Overview tab first since that's where all required fields live.
+function flagLeadField(fieldId, message) {
+  switchLeadTab('overview', document.querySelector('#lead-page .opp-tab'));
+  const el = document.getElementById(fieldId);
+  if (el) {
+    el.classList.add('field-error');
+    // Defer the scroll/focus so the tab-switch repaints first
+    setTimeout(() => {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.focus();
+    }, 50);
+  }
+  showStatus(message, 'error');
+}
+
 async function saveLead() {
+  clearLeadFieldErrors();
+
   const sourceId = document.getElementById('lead-source-id').value;
   const description = document.getElementById('lead-description').value.trim();
   const status = document.getElementById('lead-status').value;
 
-  if (!sourceId) { showStatus('Source is required', 'error'); switchLeadTab('overview', document.querySelector('#lead-page .opp-tab')); return; }
-  if (!description) { showStatus('Description is required', 'error'); switchLeadTab('overview', document.querySelector('#lead-page .opp-tab')); return; }
-  if (!status) { showStatus('Status is required', 'error'); switchLeadTab('overview', document.querySelector('#lead-page .opp-tab')); return; }
+  if (!sourceId)    { flagLeadField('lead-source-id',   'Source is required');      return; }
+  if (!description) { flagLeadField('lead-description', 'Description is required'); return; }
+  if (!status)      { flagLeadField('lead-status',      'Status is required');      return; }
 
   // Build payload — only include source-specific FK based on source type
   const sources = allData['lead_sources'] || [];
