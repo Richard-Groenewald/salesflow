@@ -195,7 +195,7 @@ tr:hover td{background:#F8FAFC;}
     <div id="login-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;" onclick="doLogin()">Sign In</button>
     <div style="margin-top:16px;font-size:11px;color:var(--text3);">Password disabled — test mode</div>
-    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.6</div>
+    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.7</div>
   </div>
 </div>
 
@@ -214,7 +214,7 @@ tr:hover td{background:#F8FAFC;}
       <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;" id="sidebar-user-role"></div>
       <div id="conn-status" class="conn-badge offline"><div class="conn-dot"></div> Offline</div>
       <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.6</div>
+        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.7</div>
         <button class="btn btn-sm" onclick="doLogout()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);border:none;font-size:11px;">Sign out</button>
       </div>
     </div>
@@ -564,6 +564,22 @@ const PAGES = {
     fields: [],
   },
 
+  leads: {
+    title: 'Leads',
+    table: 'leads',
+    custom: true,
+    columns: [],
+    fields: [],
+  },
+
+  research_campaigns: {
+    title: 'Research Campaigns',
+    table: 'research_campaigns',
+    custom: true,
+    columns: [],
+    fields: [],
+  },
+
   people: {
     title: 'People',
     table: 'people',
@@ -880,6 +896,12 @@ function showPage(page) {
   if (page === 'opportunities') {
     addBtn.onclick = () => openNewOpportunity();
     addBtn.textContent = '+ New Opportunity';
+  } else if (page === 'leads') {
+    addBtn.onclick = () => alert('Lead capture form coming in Increment 2 (v7.6.8). For now, leads can be added via Supabase directly.');
+    addBtn.textContent = '+ New Lead';
+  } else if (page === 'research_campaigns') {
+    addBtn.onclick = () => alert('Research Campaign form coming in Increment 2 (v7.6.8). For now, campaigns can be added via Supabase directly.');
+    addBtn.textContent = '+ New Campaign';
   } else if (page === 'role_permissions') {
     addBtn.style.display = 'none';
   } else {
@@ -899,6 +921,8 @@ async function loadTable(page) {
   if (cfg.custom) {
     if (page === 'role_permissions') { await renderRolePermissions(); return; }
     if (page === 'opportunities') { await renderOpportunitiesPage(); return; }
+    if (page === 'leads') { await renderLeadsPage(); return; }
+    if (page === 'research_campaigns') { await renderResearchCampaignsPage(); return; }
     if (page === 'settings') { await renderSettingsPage(); return; }
     if (page === 'home_org_members') { await renderHomeOrgMembers(); return; }
     if (page === 'opportunity_contacts') { await renderAllOppContacts(); return; }
@@ -1199,6 +1223,10 @@ const MENU = [
   {
     section: 'Pipeline',
     items: [
+      { page: 'leads',            label: 'Leads',         permission: 'manage_opportunities',
+        icon: '<path d="M8 14V6M5 9l3-3 3 3" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M3 14h10" stroke="white" stroke-width="1.5" stroke-linecap="round"/>' },
+      { page: 'research_campaigns', label: 'Research Campaigns', permission: 'manage_opportunities',
+        icon: '<circle cx="7" cy="7" r="4.5" stroke="white" stroke-width="1.5" fill="none"/><path d="M10.5 10.5L14 14" stroke="white" stroke-width="1.5" stroke-linecap="round"/>' },
       { page: 'opportunities',    label: 'Opportunities', permission: 'manage_opportunities',
         icon: '<circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2" stroke="white" stroke-width="1.5" stroke-linecap="round"/>' },
     ]
@@ -3338,6 +3366,246 @@ async function confirmDeleteDeal(id) {
   } catch(e) {
     showStatus('Delete failed: ' + e.message, 'error');
   }
+}
+
+
+// ── Leads Page ────────────────────────────────────────────
+// View tab state — persists across re-renders within the session
+let leadsViewTab = 'my_active';
+
+async function renderLeadsPage() {
+  const head = document.getElementById('table-head');
+  const body = document.getElementById('table-body');
+
+  // Hide the standard table while we build a custom layout above it
+  head.innerHTML = '';
+  body.innerHTML = '<tr><td style="padding:0;border:none;"></td></tr>';
+
+  // Build view-tab bar + table into the body cell (consistent with settings/role_permissions pattern)
+  body.innerHTML = `<tr><td style="padding:0;border:none;">
+    <div id="leads-container" style="padding:0 0 24px 0;">
+      <div id="leads-tabs" style="display:flex;gap:4px;border-bottom:2px solid var(--gray2);margin-bottom:16px;"></div>
+      <div id="leads-table-wrap"><div style="padding:20px;color:var(--gray5);">Loading leads…</div></div>
+    </div>
+  </td></tr>`;
+
+  try {
+    // Load lookups + leads in parallel
+    const [leads, sources, regions, services, people, orgs, campaigns] = await Promise.all([
+      apiGet('leads', 'select=*&order=created_at.desc'),
+      allData['lead_sources'] || apiGet('lead_sources', 'select=*'),
+      allData['regions']      || apiGet('regions', 'select=*'),
+      allData['service_major']|| apiGet('service_major', 'select=*'),
+      allData['people']       || apiGet('people', 'select=*'),
+      allData['organisations']|| apiGet('organisations', 'select=*'),
+      allData['research_campaigns'] || apiGet('research_campaigns', 'select=*'),
+    ]);
+    allData['lead_sources']       = sources;
+    allData['regions']            = regions;
+    allData['service_major']      = services;
+    allData['people']             = people;
+    allData['organisations']      = orgs;
+    allData['research_campaigns'] = campaigns;
+
+    // Helper: figure out which leads belong in each tab
+    const myPersonId = currentUser?.personId ? +currentUser.personId : null;
+    const isActive = (l) => ['New','Working','Qualified'].includes(l.status);
+    const tabs = [
+      { key: 'my_active',   label: 'My Active',   filter: l => isActive(l) && myPersonId && +l.owner_id === myPersonId },
+      { key: 'shared_pool', label: 'Shared Pool', filter: l => isActive(l) && !l.owner_id },
+      { key: 'all_active',  label: 'All Active',  filter: l => isActive(l) },
+      { key: 'dormant',     label: 'Dormant',     filter: l => l.status === 'Dormant' },
+      { key: 'all',         label: 'All',         filter: l => true },
+    ];
+
+    // Render tabs
+    const tabBar = document.getElementById('leads-tabs');
+    tabBar.innerHTML = tabs.map(t => {
+      const count = leads.filter(t.filter).length;
+      const isActiveTab = t.key === leadsViewTab;
+      return `<button onclick="leadsViewTab='${t.key}'; renderLeadsPage();" style="
+        background:${isActiveTab ? 'var(--navy)' : 'transparent'};
+        color:${isActiveTab ? 'white' : 'var(--gray6)'};
+        border:none;
+        padding:10px 16px;
+        font-size:13px;
+        font-weight:${isActiveTab ? '700' : '500'};
+        cursor:pointer;
+        border-radius:6px 6px 0 0;
+        border-bottom:${isActiveTab ? '2px solid var(--navy)' : '2px solid transparent'};
+        margin-bottom:-2px;
+      ">${t.label} <span style="opacity:0.7;font-weight:400;">(${count})</span></button>`;
+    }).join('');
+
+    // Filter to active tab
+    const activeTab = tabs.find(t => t.key === leadsViewTab) || tabs[0];
+    const filtered = leads.filter(activeTab.filter);
+
+    // Update page subtitle
+    document.getElementById('page-sub').textContent =
+      filtered.length + ' lead' + (filtered.length !== 1 ? 's' : '') + ' in this view · ' +
+      leads.length + ' total';
+
+    // Render table
+    const wrap = document.getElementById('leads-table-wrap');
+    if (!filtered.length) {
+      const emptyMsg = leads.length === 0
+        ? 'No leads yet. Click "+ New Lead" to create one. (Lead capture form lands in Increment 2.)'
+        : 'No leads match this view. Try another tab.';
+      wrap.innerHTML = `<div style="padding:40px 20px;text-align:center;color:var(--gray5);background:var(--gray1);border-radius:8px;">${emptyMsg}</div>`;
+      return;
+    }
+
+    wrap.innerHTML = `<table style="width:100%;border-collapse:collapse;">
+      <thead>
+        <tr style="background:var(--gray1);">
+          <th style="text-align:left;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray6);">Source</th>
+          <th style="text-align:left;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray6);">Target</th>
+          <th style="text-align:left;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray6);">Region</th>
+          <th style="text-align:center;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray6);" title="Fit / Trigger / Access / Capacity">Qual</th>
+          <th style="text-align:left;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray6);">Status</th>
+          <th style="text-align:left;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray6);">Owner</th>
+          <th style="text-align:left;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray6);">Next Action</th>
+          <th style="text-align:left;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray6);">Last Touch</th>
+        </tr>
+      </thead>
+      <tbody>
+      ${filtered.map(l => renderLeadRow(l, sources, regions, people, orgs)).join('')}
+      </tbody>
+    </table>`;
+  } catch(e) {
+    document.getElementById('leads-table-wrap').innerHTML =
+      `<div style="padding:20px;color:var(--red);">Error loading leads: ${e.message}</div>`;
+  }
+}
+
+// Helper: render a single lead row
+function renderLeadRow(l, sources, regions, people, orgs) {
+  const source = sources.find(s => +s.id === +l.source_id);
+  const region = regions.find(r => +r.id === +l.region_id);
+  const owner  = people.find(p => +p.id === +l.owner_id);
+  const targetOrg = l.target_org_id ? orgs.find(o => +o.id === +l.target_org_id) : null;
+
+  // Target display: known org → org name; otherwise free-text name; otherwise dash
+  const targetDisplay = targetOrg?.name || l.target_org_name || '—';
+
+  // Owner display
+  const ownerDisplay = owner
+    ? [owner.first_name, owner.last_name].filter(Boolean).join(' ')
+    : '<span style="color:var(--gray5);font-style:italic;">Shared</span>';
+
+  // Qualification dots: 4 dots, coloured by score (0=grey, 1=amber, 2=green)
+  const dotColour = (n) => n === 2 ? '#16a34a' : n === 1 ? '#f59e0b' : '#cbd5e1';
+  const qualDots = ['F','T','A','C'].map((letter, i) => {
+    const val = [l.fit, l.trigger_score, l.access, l.capacity][i];
+    return `<span title="${letter}: ${val===2?'Strong':val===1?'Weak':'Unknown'}" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${dotColour(val)};margin:0 1px;"></span>`;
+  }).join('');
+
+  // Status badge
+  const statusColour = {
+    'New':          'background:#dbeafe;color:#1e40af;',
+    'Working':      'background:#fef3c7;color:#92400e;',
+    'Qualified':    'background:#dcfce7;color:#166534;',
+    'Promoted':     'background:#e0e7ff;color:#3730a3;',
+    'Disqualified': 'background:#fee2e2;color:#991b1b;',
+    'Dormant':      'background:#f3f4f6;color:#4b5563;',
+  }[l.status] || 'background:#f3f4f6;color:#4b5563;';
+
+  // Next action — red if overdue
+  let nextActionCell = '—';
+  if (l.next_action) {
+    const isOverdue = l.next_action_date && new Date(l.next_action_date) < new Date(new Date().toDateString());
+    const dateLabel = l.next_action_date ? new Date(l.next_action_date).toLocaleDateString('en-ZA') : '';
+    nextActionCell = `<div style="${isOverdue ? 'color:var(--red);font-weight:600;' : ''}">
+      ${l.next_action}${dateLabel ? `<div style="font-size:11px;opacity:0.7;">${dateLabel}</div>` : ''}
+    </div>`;
+  }
+
+  // Last touch — colour by age
+  let lastTouchCell = '—';
+  if (l.last_touch_date) {
+    const days = Math.floor((Date.now() - new Date(l.last_touch_date).getTime()) / 86400000);
+    const col = days > 30 ? 'color:var(--red);' : days > 14 ? 'color:#f59e0b;' : '';
+    lastTouchCell = `<span style="${col}">${days === 0 ? 'Today' : days + 'd ago'}</span>`;
+  }
+
+  return `<tr onclick="openLead(${l.id})" style="cursor:pointer;border-bottom:1px solid var(--gray2);">
+    <td style="padding:10px 12px;font-size:13px;">${source?.name || '—'}</td>
+    <td style="padding:10px 12px;font-size:13px;font-weight:600;">${targetDisplay}</td>
+    <td style="padding:10px 12px;font-size:13px;">${region?.name || '—'}</td>
+    <td style="padding:10px 12px;text-align:center;white-space:nowrap;">${qualDots}</td>
+    <td style="padding:10px 12px;"><span style="${statusColour}padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;">${l.status}</span></td>
+    <td style="padding:10px 12px;font-size:13px;">${ownerDisplay}</td>
+    <td style="padding:10px 12px;font-size:13px;">${nextActionCell}</td>
+    <td style="padding:10px 12px;font-size:13px;">${lastTouchCell}</td>
+  </tr>`;
+}
+
+// Stub for opening a lead — Increment 2 will replace this with the form
+function openLead(id) {
+  alert('Lead detail/edit form coming in Increment 2 (v7.6.8).');
+}
+
+
+// ── Research Campaigns Page ───────────────────────────────
+async function renderResearchCampaignsPage() {
+  const head = document.getElementById('table-head');
+  const body = document.getElementById('table-body');
+
+  head.innerHTML = '<tr><th>Name</th><th>Segment</th><th>Region</th><th>Service Focus</th><th>Status</th><th>Owner</th><th>Created</th></tr>';
+  body.innerHTML = '<tr class="empty-row"><td colspan="7">Loading…</td></tr>';
+
+  try {
+    const [campaigns, regions, services, people] = await Promise.all([
+      apiGet('research_campaigns', 'select=*&order=created_at.desc'),
+      allData['regions']       || apiGet('regions', 'select=*'),
+      allData['service_major'] || apiGet('service_major', 'select=*'),
+      allData['people']        || apiGet('people', 'select=*'),
+    ]);
+    allData['regions']       = regions;
+    allData['service_major'] = services;
+    allData['people']        = people;
+    allData['research_campaigns'] = campaigns;
+
+    document.getElementById('page-sub').textContent =
+      campaigns.length + ' campaign' + (campaigns.length !== 1 ? 's' : '');
+
+    if (!campaigns.length) {
+      body.innerHTML = '<tr class="empty-row"><td colspan="7">No research campaigns yet. Click "+ New Campaign" to create one. (Form lands in Increment 2.)</td></tr>';
+      return;
+    }
+
+    body.innerHTML = campaigns.map(c => {
+      const region  = regions.find(r => +r.id === +c.region_id);
+      const service = services.find(s => +s.id === +c.service_major_id);
+      const owner   = people.find(p => +p.id === +c.owner_id);
+      const ownerName = owner ? [owner.first_name, owner.last_name].filter(Boolean).join(' ') : '—';
+
+      const statusColour = {
+        'Active':    'background:#dcfce7;color:#166534;',
+        'Paused':    'background:#fef3c7;color:#92400e;',
+        'Completed': 'background:#e0e7ff;color:#3730a3;',
+        'Abandoned': 'background:#fee2e2;color:#991b1b;',
+      }[c.status] || 'background:#f3f4f6;color:#4b5563;';
+
+      return `<tr onclick="openResearchCampaign(${c.id})" style="cursor:pointer;">
+        <td style="font-weight:600;">${c.name}</td>
+        <td>${c.segment || '—'}</td>
+        <td>${region?.name || '—'}</td>
+        <td>${service?.name || '—'}</td>
+        <td><span style="${statusColour}padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;">${c.status}</span></td>
+        <td>${ownerName}</td>
+        <td>${c.created_at ? new Date(c.created_at).toLocaleDateString('en-ZA') : '—'}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    body.innerHTML = `<tr class="empty-row"><td colspan="7">Error: ${e.message}</td></tr>`;
+  }
+}
+
+// Stub for opening a research campaign — Increment 2 will replace this
+function openResearchCampaign(id) {
+  alert('Research Campaign detail/edit form coming in Increment 2 (v7.6.8).');
 }
 
 
