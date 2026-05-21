@@ -20,7 +20,7 @@ Focus CRM (formerly SalesFlow) — internal CRM for **Xone Integrated Security (
 
 - **Frontend:** Netlify — `storied-griffin-6eab6b.netlify.app`
 - **Backend:** Supabase — `kevrfdjqyuhmgziqxuvs.supabase.co`
-- **Repo:** GitHub — `Richard-Groenewald/focus` (previously `Richard-Groenewald/salesflow`)
+- **Repo:** GitHub — `Richard-Groenewald/Focus` (previously `Richard-Groenewald/salesflow`)
 
 ## Architecture
 
