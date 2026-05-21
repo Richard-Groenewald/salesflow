@@ -203,7 +203,7 @@ tr:hover td{background:#F8FAFC;}
     <div id="login-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;" onclick="doLogin()">Sign In</button>
     <div style="margin-top:16px;font-size:11px;color:var(--text3);">Password disabled — test mode</div>
-    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.16</div>
+    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.17</div>
   </div>
 </div>
 
@@ -222,7 +222,7 @@ tr:hover td{background:#F8FAFC;}
       <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;" id="sidebar-user-role"></div>
       <div id="conn-status" class="conn-badge offline"><div class="conn-dot"></div> Offline</div>
       <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.16</div>
+        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.17</div>
         <button class="btn btn-sm" onclick="doLogout()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);border:none;font-size:11px;">Sign out</button>
       </div>
     </div>
@@ -2261,49 +2261,49 @@ async function loadEngagements(dealId) {
     const graceMins = +(appSettings['engagement_edit_minutes'] || 60);
     const now = Date.now();
 
-    list.innerHTML = engs.map(e => {
+    const rows = engs.map(e => {
       const createdAt = new Date(e.created_at).getTime();
       const ageMs = now - createdAt;
       const gracePeriodMs = graceMins * 60 * 1000;
       const isEditable = ageMs < gracePeriodMs;
 
-      // Truncate notes to ~120 chars for the row preview
-      const notesFull = (e.notes || '').trim();
-      const notesPreview = notesFull.length > 120 ? notesFull.slice(0, 120).trimEnd() + '…' : notesFull;
+      const hasNext = !!e.next_action;
+      const done = !!e.next_action_done;
+      const nextActionCell = hasNext
+        ? (done ? `<span style="text-decoration:line-through;color:var(--text3);">${e.next_action}</span>` : e.next_action)
+        : '<span style="color:var(--text3);">—</span>';
+      const nextDateCell = hasNext && e.next_action_date
+        ? e.next_action_date
+        : '<span style="color:var(--text3);">—</span>';
+      const completedCell = !hasNext
+        ? '<span style="color:var(--text3);">—</span>'
+        : (done
+            ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#16a34a;"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M3 8.5l3.5 3.5L13 5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`
+            : `<span style="display:inline-block;width:16px;height:16px;border-radius:50%;border:1.5px solid var(--text3);"></span>`);
 
-      // Next action block (only renders if there's a next action)
-      let nextActionBlock = '';
-      if (e.next_action) {
-        const done = !!e.next_action_done;
-        const dotColour = done ? '#16a34a' : 'var(--text3)';
-        const tickGlyph = done
-          ? `<svg width="12" height="12" viewBox="0 0 16 16" style="vertical-align:-1px;"><path d="M3 8.5l3.5 3.5L13 5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
-          : '';
-        const dot = `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:${dotColour};margin-right:6px;vertical-align:-2px;">${tickGlyph}</span>`;
-        const dateStr = e.next_action_date ? `<span style="color:var(--text3);margin-left:6px;">(${e.next_action_date})</span>` : '';
-        const text = done
-          ? `<span style="text-decoration:line-through;color:var(--text3);">${e.next_action}</span>`
-          : `<span>${e.next_action}</span>`;
-        nextActionBlock = `<div style="font-size:12px;margin-top:6px;">${dot}<span style="color:var(--text3);">Next:</span> ${text}${dateStr}</div>`;
-      }
+      const borderLeft = isEditable ? '3px solid var(--red)' : '3px solid var(--border)';
+      const lockedTag = isEditable ? '' : ' <span style="font-size:10px;color:var(--text3);font-weight:400;text-transform:none;letter-spacing:0;">(view only)</span>';
 
-      // Whole row is clickable. opens the engagement (edit if within grace, view if locked).
-      // Visual cue for locked: subtle muted left border.
-      const borderStyle = isEditable
-        ? 'border-left:3px solid var(--red);'
-        : 'border-left:3px solid var(--border);';
-
-      return `<div class="eng-entry" style="${borderStyle}cursor:pointer;" onclick="openEngagementRow(${e.id})">
-        <div class="eng-entry-header">
-          <span class="eng-entry-date">${e.engagement_date}</span>
-          <span class="eng-badge">${e.engagement_type || ''}</span>
-          <div style="flex:1;"></div>
-          ${isEditable ? '' : '<span style="font-size:11px;color:var(--text3);">View only</span>'}
-        </div>
-        ${notesPreview ? `<div style="font-size:13px;white-space:pre-wrap;overflow:hidden;text-overflow:ellipsis;">${notesPreview}</div>` : ''}
-        ${nextActionBlock}
-      </div>`;
+      return `<tr style="border-top:1px solid var(--border);cursor:pointer;" onclick="openEngagementRow(${e.id})">
+        <td style="padding:10px 12px;font-weight:600;border-left:${borderLeft};">${e.engagement_date}${lockedTag}</td>
+        <td style="padding:10px 12px;"><span class="eng-badge">${e.engagement_type || ''}</span></td>
+        <td style="padding:10px 12px;color:var(--text2);">${nextActionCell}</td>
+        <td style="padding:10px 12px;color:var(--text2);">${nextDateCell}</td>
+        <td style="padding:10px 12px;text-align:center;">${completedCell}</td>
+      </tr>`;
     }).join('');
+
+    list.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead><tr style="background:var(--bg);text-align:left;">
+          <th style="padding:8px 12px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;">Date</th>
+          <th style="padding:8px 12px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;">Type</th>
+          <th style="padding:8px 12px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;">Next Action</th>
+          <th style="padding:8px 12px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;">Next Action Date</th>
+          <th style="padding:8px 12px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;text-align:center;">Next Action Completed</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
   } catch(err) {
     list.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text3);">Error: ${err.message}</div>`;
   }
