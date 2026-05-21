@@ -203,7 +203,7 @@ tr:hover td{background:#F8FAFC;}
     <div id="login-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;" onclick="doLogin()">Sign In</button>
     <div style="margin-top:16px;font-size:11px;color:var(--text3);">Password disabled — test mode</div>
-    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.21</div>
+    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.22</div>
   </div>
 </div>
 
@@ -222,7 +222,7 @@ tr:hover td{background:#F8FAFC;}
       <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;" id="sidebar-user-role"></div>
       <div id="conn-status" class="conn-badge offline"><div class="conn-dot"></div> Offline</div>
       <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.21</div>
+        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.22</div>
         <button class="btn btn-sm" onclick="doLogout()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);border:none;font-size:11px;">Sign out</button>
       </div>
     </div>
@@ -2157,16 +2157,15 @@ async function openEngagementModal(mode = 'new') {
             </div>
           </div>
           <div class="form-group" style="margin-top:-4px;">
-            <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);cursor:pointer;">
+            <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);cursor:pointer;flex-wrap:wrap;">
               <input type="checkbox" id="eng-next-done" style="margin:0;">
-              Next action completed
+              <span>Next action completed</span>
+              <span id="eng-completed-at-inline" style="font-size:12px;color:var(--text3);font-weight:600;"></span>
             </label>
           </div>
           <div id="eng-completion-section" style="display:none;margin-top:8px;padding:10px 12px;background:var(--bg);border-left:3px solid #16a34a;border-radius:4px;">
-            <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;font-weight:700;margin-bottom:4px;">Completion</div>
-            <div id="eng-completion-when" style="font-size:12px;color:var(--text2);margin-bottom:6px;"></div>
             <div id="eng-completion-note-wrap" style="display:none;">
-              <div style="font-size:11px;color:var(--text3);font-weight:600;margin-bottom:2px;">Note</div>
+              <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;font-weight:700;margin-bottom:4px;">Completion Note</div>
               <div id="eng-completion-note" style="font-size:13px;white-space:pre-wrap;color:var(--text2);"></div>
             </div>
           </div>
@@ -2322,36 +2321,43 @@ async function loadEngagements(dealId) {
       if (!hasNext) {
         completedCell = '<span style="color:var(--text3);">—</span>';
       } else {
-        const completedAt = e.next_action_completed_at ? new Date(e.next_action_completed_at).getTime() : null;
-        const inCompletedGrace = completedAt ? (now - completedAt) < gracePeriodMs : false;
+        const completedAt = e.next_action_completed_at ? new Date(e.next_action_completed_at) : null;
+        const inCompletedGrace = completedAt ? (now - completedAt.getTime()) < gracePeriodMs : false;
         const tickDisabled = done && !inCompletedGrace;
-        completedCell = `<input type="checkbox" ${done ? 'checked' : ''} ${tickDisabled ? 'disabled' : ''} onclick="event.stopPropagation();" onchange="onCompletedToggle(${e.id}, this, event)" style="cursor:${tickDisabled ? 'default' : 'pointer'};width:16px;height:16px;">`;
+        const completedDateStr = done && completedAt ? completedAt.toLocaleDateString('en-ZA') : '';
+        completedCell = `<div style="display:inline-flex;flex-direction:column;align-items:flex-end;gap:2px;">
+          <input type="checkbox" ${done ? 'checked' : ''} ${tickDisabled ? 'disabled' : ''} onclick="event.stopPropagation();" onchange="onCompletedToggle(${e.id}, this, event)" style="cursor:${tickDisabled ? 'default' : 'pointer'};width:16px;height:16px;margin:0;">
+          ${completedDateStr ? `<div style="font-size:10px;color:var(--text3);white-space:nowrap;">${completedDateStr}</div>` : ''}
+        </div>`;
       }
 
-      // Type cell: badge + truncated notes preview underneath
+      // Type + truncated notes on the same line
       const notesFull = (e.notes || '').trim();
-      const notesPreview = notesFull.length > 80 ? notesFull.slice(0, 80).trimEnd() + '…' : notesFull;
-      const typeCell = `<span class="eng-badge">${e.engagement_type || ''}</span>${notesPreview ? `<div style="font-size:11px;color:var(--text3);margin-top:3px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${notesPreview}</div>` : ''}`;
+      const notesPreview = notesFull.length > 100 ? notesFull.slice(0, 100).trimEnd() + '…' : notesFull;
+      const typeCell = `<div style="display:flex;align-items:center;gap:10px;min-width:0;">
+        <span class="eng-badge" style="flex-shrink:0;">${e.engagement_type || ''}</span>
+        ${notesPreview ? `<span style="font-size:12px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">${notesPreview}</span>` : ''}
+      </div>`;
 
       const borderLeft = isEditable ? '3px solid var(--red)' : '3px solid var(--border)';
 
       return `<tr style="border-top:1px solid var(--border);cursor:pointer;" onclick="openEngagementRow(${e.id})">
-        <td style="padding:10px 12px;font-weight:600;border-left:${borderLeft};vertical-align:top;">${e.engagement_date}</td>
-        <td style="padding:10px 12px;vertical-align:top;">${typeCell}</td>
-        <td style="padding:10px 12px;color:var(--text2);vertical-align:top;">${nextActionCell}</td>
-        <td style="padding:10px 12px;color:var(--text2);vertical-align:top;">${nextDateCell}</td>
-        <td style="padding:10px 12px;text-align:center;vertical-align:top;">${completedCell}</td>
+        <td style="padding:10px 8px 10px 12px;font-weight:600;border-left:${borderLeft};vertical-align:middle;white-space:nowrap;width:1%;">${e.engagement_date}</td>
+        <td style="padding:10px 12px 10px 4px;vertical-align:middle;width:100%;">${typeCell}</td>
+        <td style="padding:10px 12px;color:var(--text2);vertical-align:middle;text-align:right;white-space:nowrap;width:1%;">${nextActionCell}</td>
+        <td style="padding:10px 12px;color:var(--text2);vertical-align:middle;text-align:right;white-space:nowrap;width:1%;">${nextDateCell}</td>
+        <td style="padding:10px 12px;text-align:right;vertical-align:middle;white-space:nowrap;width:1%;">${completedCell}</td>
       </tr>`;
     }).join('');
 
     list.innerHTML = `
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:auto;">
         <thead><tr style="background:var(--bg);text-align:left;">
-          <th style="padding:8px 12px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;">Date</th>
-          <th style="padding:8px 12px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;">Type</th>
-          <th style="padding:8px 12px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;">Next Action</th>
-          <th style="padding:8px 12px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;">Next Action Date</th>
-          <th style="padding:8px 12px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;text-align:center;">Completed</th>
+          <th style="padding:8px 8px 8px 12px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;white-space:nowrap;">Date</th>
+          <th style="padding:8px 12px 8px 4px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;">Type</th>
+          <th style="padding:8px 12px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;text-align:right;white-space:nowrap;">Next Action</th>
+          <th style="padding:8px 12px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;text-align:right;white-space:nowrap;">Due Date</th>
+          <th style="padding:8px 12px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;text-align:right;white-space:nowrap;">Completed</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>`;
@@ -2478,28 +2484,28 @@ async function openEditEngagementModal(engId) {
   if (saveBtn) saveBtn.onclick = () => saveEngagement(engId);
 }
 
-// Show "Completed at <ts>" and an optional completion note inside the engagement modal
-// (used by both edit and view openers). Hides itself if the engagement isn't marked done.
+// Populate the completion timestamp inline next to the checkbox label, and show the
+// completion note (if any) in the panel below. Hides everything if the engagement
+// isn't marked done.
 function populateCompletionSection(eng) {
+  const inlineEl = document.getElementById('eng-completed-at-inline');
   const section = document.getElementById('eng-completion-section');
-  const whenEl = document.getElementById('eng-completion-when');
   const noteWrap = document.getElementById('eng-completion-note-wrap');
   const noteEl = document.getElementById('eng-completion-note');
-  if (!section) return;
-  if (!eng?.next_action_done) { section.style.display = 'none'; return; }
-  section.style.display = 'block';
-  if (eng.next_action_completed_at) {
+  if (inlineEl) inlineEl.textContent = '';
+  if (section) section.style.display = 'none';
+  if (noteWrap) noteWrap.style.display = 'none';
+  if (!eng?.next_action_done) return;
+
+  if (inlineEl && eng.next_action_completed_at) {
     const ts = new Date(eng.next_action_completed_at);
-    whenEl.textContent = 'Completed at ' + ts.toLocaleString('en-ZA');
-  } else {
-    whenEl.textContent = 'Completed';
+    inlineEl.textContent = '— ' + ts.toLocaleString('en-ZA');
   }
   const note = (eng.next_action_completion_note || '').trim();
-  if (note) {
+  if (note && section && noteWrap && noteEl) {
+    section.style.display = 'block';
     noteWrap.style.display = 'block';
     noteEl.textContent = note;
-  } else {
-    noteWrap.style.display = 'none';
   }
 }
 
