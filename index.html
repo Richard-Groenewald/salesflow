@@ -203,7 +203,7 @@ tr:hover td{background:#F8FAFC;}
     <div id="login-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;" onclick="doLogin()">Sign In</button>
     <div style="margin-top:16px;font-size:11px;color:var(--text3);">Password disabled — test mode</div>
-    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.13</div>
+    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.14</div>
   </div>
 </div>
 
@@ -222,7 +222,7 @@ tr:hover td{background:#F8FAFC;}
       <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;" id="sidebar-user-role"></div>
       <div id="conn-status" class="conn-badge offline"><div class="conn-dot"></div> Offline</div>
       <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.13</div>
+        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.14</div>
         <button class="btn btn-sm" onclick="doLogout()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);border:none;font-size:11px;">Sign out</button>
       </div>
     </div>
@@ -2137,6 +2137,12 @@ async function openEngagementModal() {
               <input type="date" id="eng-next-date" class="form-control">
             </div>
           </div>
+          <div class="form-group" style="margin-top:-4px;">
+            <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);cursor:pointer;">
+              <input type="checkbox" id="eng-next-done" style="margin:0;">
+              Next action completed
+            </label>
+          </div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
@@ -2193,6 +2199,7 @@ async function saveEngagement(editId) {
   const notes = document.getElementById('eng-notes').value;
   const nextAction = document.getElementById('eng-next-action').value;
   const nextDate = document.getElementById('eng-next-date').value;
+  const nextDone = document.getElementById('eng-next-done')?.checked || false;
   const people = window._engPeople || [];
 
   if (!date) { showStatus('Date is required', 'error'); return; }
@@ -2204,6 +2211,7 @@ async function saveEngagement(editId) {
       await api('engagements', 'PATCH', {
         engagement_date: date, engagement_type: type,
         notes, next_action: nextAction, next_action_date: nextDate || null,
+        next_action_done: nextDone,
       }, 'id=eq.' + editId);
       // Remove old people and re-add
       await api('engagement_people', 'DELETE', null, 'engagement_id=eq.' + editId);
@@ -2213,6 +2221,7 @@ async function saveEngagement(editId) {
         deal_id: oppData.id,
         engagement_date: date, engagement_type: type,
         notes, next_action: nextAction, next_action_date: nextDate || null,
+        next_action_done: nextDone,
         created_by: currentUser?.personId || null,
       }, 'select=*');
       engId = result[0].id;
@@ -2246,42 +2255,72 @@ async function loadEngagements(dealId) {
       list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3);">No engagements logged yet</div>';
       return;
     }
-    const engPeople = await apiGet('engagement_people', `engagement_id=in.(${engs.map(e=>e.id).join(',')})&select=*`);
-    const people = allData['people'] || await apiGet('people', 'select=*');
-    allData['people'] = people;
 
     const graceMins = +(appSettings['engagement_edit_minutes'] || 60);
     const now = Date.now();
 
     list.innerHTML = engs.map(e => {
-      const ep = engPeople.filter(p => +p.engagement_id === +e.id);
-      const names = ep.map(p => {
-        const person = people.find(x => +x.id === +p.person_id);
-        return person ? [person.first_name, person.last_name].filter(Boolean).join(' ') : '';
-      }).filter(Boolean).join(', ');
-
       const createdAt = new Date(e.created_at).getTime();
       const ageMs = now - createdAt;
       const gracePeriodMs = graceMins * 60 * 1000;
       const isEditable = ageMs < gracePeriodMs;
-      const minsLeft = Math.max(0, Math.round((gracePeriodMs - ageMs) / 60000));
 
-      return `<div class="eng-entry" style="${isEditable ? 'border-left:3px solid var(--red);' : ''}">
+      // Truncate notes to ~120 chars for the row preview
+      const notesFull = (e.notes || '').trim();
+      const notesPreview = notesFull.length > 120 ? notesFull.slice(0, 120).trimEnd() + '…' : notesFull;
+
+      // Next action block (only renders if there's a next action)
+      let nextActionBlock = '';
+      if (e.next_action) {
+        const done = !!e.next_action_done;
+        const dotColour = done ? '#16a34a' : 'var(--text3)';
+        const tickGlyph = done
+          ? `<svg width="12" height="12" viewBox="0 0 16 16" style="vertical-align:-1px;"><path d="M3 8.5l3.5 3.5L13 5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+          : '';
+        const dot = `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:${dotColour};margin-right:6px;vertical-align:-2px;">${tickGlyph}</span>`;
+        const dateStr = e.next_action_date ? `<span style="color:var(--text3);margin-left:6px;">(${e.next_action_date})</span>` : '';
+        const text = done
+          ? `<span style="text-decoration:line-through;color:var(--text3);">${e.next_action}</span>`
+          : `<span>${e.next_action}</span>`;
+        nextActionBlock = `<div style="font-size:12px;margin-top:6px;">${dot}<span style="color:var(--text3);">Next:</span> ${text}${dateStr}</div>`;
+      }
+
+      // Whole row is clickable. opens the engagement (edit if within grace, view if locked).
+      // Visual cue for locked: subtle muted left border.
+      const borderStyle = isEditable
+        ? 'border-left:3px solid var(--red);'
+        : 'border-left:3px solid var(--border);';
+
+      return `<div class="eng-entry" style="${borderStyle}cursor:pointer;" onclick="openEngagementRow(${e.id})">
         <div class="eng-entry-header">
           <span class="eng-entry-date">${e.engagement_date}</span>
           <span class="eng-badge">${e.engagement_type || ''}</span>
-          ${names ? `<span style="color:var(--text2);font-size:12px;">${names}</span>` : ''}
           <div style="flex:1;"></div>
-          ${isEditable
-            ? `<button class="btn btn-ghost btn-sm" onclick="openEditEngagementModal(${e.id})" style="font-size:11px;">Edit <span style="color:var(--text3);">(${minsLeft}m left)</span></button>`
-            : '<span style="font-size:11px;color:var(--text3);">Locked</span>'}
+          ${isEditable ? '' : '<span style="font-size:11px;color:var(--text3);">View only</span>'}
         </div>
-        ${e.notes ? `<div style="font-size:13px;margin-bottom:6px;">${e.notes}</div>` : ''}
-        ${e.next_action ? `<div style="font-size:12px;color:var(--text3);">→ ${e.next_action}${e.next_action_date?' ('+e.next_action_date+')':''}</div>` : ''}
+        ${notesPreview ? `<div style="font-size:13px;white-space:pre-wrap;overflow:hidden;text-overflow:ellipsis;">${notesPreview}</div>` : ''}
+        ${nextActionBlock}
       </div>`;
     }).join('');
   } catch(err) {
     list.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text3);">Error: ${err.message}</div>`;
+  }
+}
+
+// Single entry point for clicking an engagement row.
+// Routes to either openEditEngagementModal (within grace) or openViewEngagementModal (locked).
+async function openEngagementRow(engId) {
+  try {
+    const engs = await apiGet('engagements', `id=eq.${engId}&select=created_at`);
+    const eng = engs[0];
+    if (!eng) return;
+    const graceMins = +(appSettings['engagement_edit_minutes'] || 60);
+    const ageMs = Date.now() - new Date(eng.created_at).getTime();
+    const isEditable = ageMs < graceMins * 60 * 1000;
+    if (isEditable) await openEditEngagementModal(engId);
+    else            await openViewEngagementModal(engId);
+  } catch(err) {
+    showStatus('Failed to open engagement: ' + err.message, 'error');
   }
 }
 
@@ -2306,10 +2345,66 @@ async function openEditEngagementModal(engId) {
   const n = document.getElementById('eng-notes'); if (n) n.value = eng.notes || '';
   const na = document.getElementById('eng-next-action'); if (na) na.value = eng.next_action || '';
   const nd = document.getElementById('eng-next-date'); if (nd) nd.value = eng.next_action_date || '';
+  const ndone = document.getElementById('eng-next-done'); if (ndone) ndone.checked = !!eng.next_action_done;
   renderEngPeople();
 
   const saveBtn = document.querySelector('#modal-root .btn-primary');
   if (saveBtn) saveBtn.onclick = () => saveEngagement(engId);
+}
+
+// View-only version for locked engagements.
+// Opens the same modal as edit, populates everything, then disables every input,
+// hides the Save button, and shows a small banner at the top.
+async function openViewEngagementModal(engId) {
+  const engs = await apiGet('engagements', `id=eq.${engId}&select=*`);
+  const eng = engs[0];
+  if (!eng) return;
+
+  const engPeople = await apiGet('engagement_people', `engagement_id=eq.${engId}&select=*`);
+  const people = allData['people'] || await apiGet('people', 'select=*');
+  allData['people'] = people;
+
+  window._engPeople = engPeople.map(ep => {
+    const p = people.find(x => +x.id === +ep.person_id);
+    return { id: String(ep.person_id), name: p ? [p.first_name,p.last_name].filter(Boolean).join(' ') : 'Unknown' };
+  });
+
+  await openEngagementModal();
+
+  // Populate the form
+  const d = document.getElementById('eng-date'); if (d) d.value = eng.engagement_date;
+  const t = document.getElementById('eng-type'); if (t) t.value = eng.engagement_type || 'Meeting';
+  const n = document.getElementById('eng-notes'); if (n) n.value = eng.notes || '';
+  const na = document.getElementById('eng-next-action'); if (na) na.value = eng.next_action || '';
+  const nd = document.getElementById('eng-next-date'); if (nd) nd.value = eng.next_action_date || '';
+  const ndone = document.getElementById('eng-next-done'); if (ndone) ndone.checked = !!eng.next_action_done;
+  renderEngPeople();
+
+  // Lock down everything
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.querySelectorAll('input, select, textarea, button').forEach(el => {
+    // Keep the close (×) button and the Cancel button functional
+    if (el.classList?.contains('modal-close')) return;
+    if (el.classList?.contains('btn-secondary')) return;
+    el.disabled = true;
+  });
+
+  // Hide Save (we use innerHTML find since the Save button doesn't have a stable id)
+  const saveBtn = modalRoot.querySelector('.btn-primary');
+  if (saveBtn) saveBtn.style.display = 'none';
+
+  // Insert a banner at the top of the modal body
+  const body = modalRoot.querySelector('.modal-body');
+  if (body) {
+    const banner = document.createElement('div');
+    banner.style.cssText = 'margin:-4px 0 14px;padding:10px 12px;background:#F1F5F9;border:1px solid #CBD5E1;border-radius:var(--radius);color:#475569;font-size:12px;font-weight:600;';
+    banner.textContent = 'View only — edit window has closed.';
+    body.insertBefore(banner, body.firstChild);
+  }
+
+  // Override modal title
+  const title = modalRoot.querySelector('.modal-title');
+  if (title) title.textContent = 'View Engagement';
 }
 
 async function saveOpportunity() {
@@ -4279,19 +4374,60 @@ function renderLeadInteractions() {
     list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3);">No interactions logged yet</div>';
     return;
   }
-  const people = allData['people'] || [];
+  // Whole row is clickable → opens view-only (lead interactions have no edit UI today).
+  // Same visual language as engagement rows but without the next-action block (leads track next actions at the lead level).
   list.innerHTML = leadInteractions.map(i => {
-    const author = people.find(p => +p.id === +i.created_by);
-    const authorName = author ? [author.first_name, author.last_name].filter(Boolean).join(' ') : '';
-    return `<div class="eng-entry">
+    const notesFull = (i.notes || '').trim();
+    const notesPreview = notesFull.length > 120 ? notesFull.slice(0, 120).trimEnd() + '…' : notesFull;
+    return `<div class="eng-entry" style="border-left:3px solid var(--border);cursor:pointer;" onclick="openLeadInteractionView(${i.id})">
       <div class="eng-entry-header">
         <span class="eng-entry-date">${i.engagement_date}</span>
         <span class="eng-badge">${i.engagement_type || ''}</span>
-        ${authorName ? `<span style="color:var(--text2);font-size:12px;">${authorName}</span>` : ''}
+        <div style="flex:1;"></div>
+        <span style="font-size:11px;color:var(--text3);">View only</span>
       </div>
-      ${i.notes ? `<div style="font-size:13px;">${i.notes}</div>` : ''}
+      ${notesPreview ? `<div style="font-size:13px;white-space:pre-wrap;overflow:hidden;text-overflow:ellipsis;">${notesPreview}</div>` : ''}
     </div>`;
   }).join('');
+}
+
+// View-only modal for an existing lead interaction.
+// Lead interactions have no edit grace period in the current build — they're always view-only after save.
+function openLeadInteractionView(interactionId) {
+  const i = leadInteractions.find(x => +x.id === +interactionId);
+  if (!i) return;
+  const html = `
+    <div class="modal-overlay" onmousedown="if(event.target===this)this._md=Date.now()" onclick="if(event.target===this&&Date.now()-this._md<300)closeModal()">
+      <div class="modal" style="width:520px;">
+        <div class="modal-header">
+          <div class="modal-title">View Lead Interaction</div>
+          <button class="modal-close" onclick="closeModal()">×</button>
+        </div>
+        <div class="modal-body">
+          <div style="margin:-4px 0 14px;padding:10px 12px;background:#F1F5F9;border:1px solid #CBD5E1;border-radius:var(--radius);color:#475569;font-size:12px;font-weight:600;">
+            View only.
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Date</label>
+              <input type="date" class="form-control" value="${i.engagement_date || ''}" disabled>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Type</label>
+              <input type="text" class="form-control" value="${i.engagement_type || ''}" disabled>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Notes</label>
+            <textarea class="form-control" rows="6" disabled>${(i.notes || '').replace(/</g,'&lt;')}</textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('modal-root').innerHTML = html;
 }
 
 function openLeadInteractionModal() {
