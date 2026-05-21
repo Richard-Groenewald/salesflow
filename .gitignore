@@ -2,3 +2,4 @@
 .env.local
 push_to_github.js
 node_modules/
+.claude/
