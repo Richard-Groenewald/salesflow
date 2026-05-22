@@ -203,7 +203,7 @@ tr:hover td{background:#F8FAFC;}
     <div id="login-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;" onclick="doLogin()">Sign In</button>
     <div style="margin-top:16px;font-size:11px;color:var(--text3);">Password disabled — test mode</div>
-    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.23</div>
+    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.24</div>
   </div>
 </div>
 
@@ -222,7 +222,7 @@ tr:hover td{background:#F8FAFC;}
       <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;" id="sidebar-user-role"></div>
       <div id="conn-status" class="conn-badge offline"><div class="conn-dot"></div> Offline</div>
       <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.23</div>
+        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.24</div>
         <button class="btn btn-sm" onclick="doLogout()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);border:none;font-size:11px;">Sign out</button>
       </div>
     </div>
@@ -4522,29 +4522,62 @@ function renderLeadInteractions() {
     list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3);">No interactions logged yet</div>';
     return;
   }
-  // Whole row clickable. Routes to edit (within grace) or view (locked).
-  // Matches engagement row design.
   const graceMins = +(appSettings['engagement_edit_minutes'] || 60);
   const now = Date.now();
-  list.innerHTML = leadInteractions.map(i => {
-    const createdAt = new Date(i.created_at).getTime();
-    const ageMs = now - createdAt;
-    const isEditable = ageMs < graceMins * 60 * 1000;
+  const gracePeriodMs = graceMins * 60 * 1000;
+
+  const rows = leadInteractions.map(i => {
+    const isEditable = (now - new Date(i.created_at).getTime()) < gracePeriodMs;
+
+    const hasNext = !!i.next_action;
+    const done = !!i.next_action_done;
+    const nextActionCell = hasNext
+      ? (done ? `<span style="text-decoration:line-through;color:var(--text3);">${i.next_action}</span>` : i.next_action)
+      : '<span style="color:var(--text3);">—</span>';
+    const nextDateCell = hasNext && i.next_action_date
+      ? i.next_action_date
+      : '<span style="color:var(--text3);">—</span>';
+
+    let completedCell;
+    if (!hasNext) {
+      completedCell = '<span style="color:var(--text3);">—</span>';
+    } else if (done && i.next_action_completed_at) {
+      completedCell = `<span style="font-weight:600;">${new Date(i.next_action_completed_at).toLocaleDateString('en-ZA')}</span>`;
+    } else if (done) {
+      completedCell = '<span style="font-weight:600;color:var(--text3);">✓</span>';
+    } else {
+      completedCell = '<span style="color:var(--text3);">—</span>';
+    }
+
     const notesFull = (i.notes || '').trim();
-    const notesPreview = notesFull.length > 120 ? notesFull.slice(0, 120).trimEnd() + '…' : notesFull;
-    const borderStyle = isEditable
-      ? 'border-left:3px solid var(--red);'
-      : 'border-left:3px solid var(--border);';
-    return `<div class="eng-entry" style="${borderStyle}cursor:pointer;" onclick="openLeadInteractionRow(${i.id})">
-      <div class="eng-entry-header">
-        <span class="eng-entry-date">${i.engagement_date}</span>
-        <span class="eng-badge">${i.engagement_type || ''}</span>
-        <div style="flex:1;"></div>
-        ${isEditable ? '' : '<span style="font-size:11px;color:var(--text3);">View only</span>'}
-      </div>
-      ${notesPreview ? `<div style="font-size:13px;white-space:pre-wrap;overflow:hidden;text-overflow:ellipsis;">${notesPreview}</div>` : ''}
+    const notesPreview = notesFull.length > 100 ? notesFull.slice(0, 100).trimEnd() + '…' : notesFull;
+    const typeCell = `<div style="display:flex;align-items:center;gap:10px;min-width:0;">
+      <span class="eng-badge" style="flex-shrink:0;">${i.engagement_type || ''}</span>
+      ${notesPreview ? `<span style="font-size:12px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">${notesPreview}</span>` : ''}
     </div>`;
+
+    const borderLeft = isEditable ? '3px solid var(--red)' : '3px solid var(--border)';
+
+    return `<tr style="border-top:1px solid var(--border);cursor:pointer;" onclick="openLeadInteractionRow(${i.id})">
+      <td style="padding:10px 8px 10px 12px;font-weight:600;border-left:${borderLeft};vertical-align:middle;white-space:nowrap;width:1%;">${i.engagement_date}</td>
+      <td style="padding:10px 12px 10px 4px;vertical-align:middle;width:100%;">${typeCell}</td>
+      <td style="padding:10px 12px;color:var(--text2);vertical-align:middle;text-align:right;white-space:nowrap;width:1%;">${nextActionCell}</td>
+      <td style="padding:10px 12px;color:var(--text2);vertical-align:middle;text-align:right;white-space:nowrap;width:1%;">${nextDateCell}</td>
+      <td style="padding:10px 12px;text-align:right;vertical-align:middle;white-space:nowrap;width:1%;">${completedCell}</td>
+    </tr>`;
   }).join('');
+
+  list.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:auto;">
+      <thead><tr style="background:var(--bg);text-align:left;">
+        <th style="padding:8px 8px 8px 12px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;white-space:nowrap;">Date</th>
+        <th style="padding:8px 12px 8px 4px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;">Type</th>
+        <th style="padding:8px 12px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;text-align:right;white-space:nowrap;">Next Action</th>
+        <th style="padding:8px 12px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;text-align:right;white-space:nowrap;">Due Date</th>
+        <th style="padding:8px 12px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;text-align:right;white-space:nowrap;">Completed</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
 }
 
 // Router: clicking an interaction row routes to edit (within grace) or view (locked).
@@ -4568,6 +4601,9 @@ function renderLeadInteractionModalHtml(mode, interaction) {
   const dateValue = i.engagement_date || new Date().toISOString().slice(0,10);
   const typeValue = i.engagement_type || 'Call';
   const notesValue = (i.notes || '').replace(/</g,'&lt;');
+  const actionDetailsValue = (i.action_details || '').replace(/</g,'&lt;');
+  const nextDateValue = i.next_action_date || '';
+  const nextDone = !!i.next_action_done;
   const types = ['Call','Email','Meeting','Site Visit','Note'];
   const banner = isView
     ? `<div style="margin:-4px 0 14px;padding:10px 12px;background:#F1F5F9;border:1px solid #CBD5E1;border-radius:var(--radius);color:#475569;font-size:12px;font-weight:600;">View only — edit window has closed.</div>`
@@ -4580,7 +4616,7 @@ function renderLeadInteractionModalHtml(mode, interaction) {
 
   return `
     <div class="modal-overlay" onmousedown="if(event.target===this)this._md=Date.now()" onclick="if(event.target===this&&Date.now()-this._md<300)closeModal()">
-      <div class="modal" style="width:520px;">
+      <div class="modal" style="width:560px;">
         <div class="modal-header">
           <div class="modal-title">${title}</div>
           <button class="modal-close" onclick="closeModal()">×</button>
@@ -4600,8 +4636,35 @@ function renderLeadInteractionModalHtml(mode, interaction) {
             </div>
           </div>
           <div class="form-group">
-            <label class="form-label">Notes</label>
-            <textarea id="li-notes" class="form-control" rows="4" placeholder="What happened?" ${dis}>${notesValue}</textarea>
+            <label class="form-label">Interaction Details</label>
+            <textarea id="li-notes" class="form-control" rows="3" placeholder="What happened?" ${dis}>${notesValue}</textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Next Action</label>
+              <select id="li-next-action" class="form-control" ${dis}>
+                <option value="">— select —</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Due Date</label>
+              <input type="date" id="li-next-date" class="form-control" value="${nextDateValue}" ${dis}>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Action Details</label>
+            <textarea id="li-action-details" class="form-control" rows="2" placeholder="More on what happens next..." ${dis}>${actionDetailsValue}</textarea>
+          </div>
+          <div class="form-group" style="margin-top:-4px;">
+            <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);cursor:pointer;flex-wrap:wrap;">
+              <input type="checkbox" id="li-next-done" ${nextDone ? 'checked' : ''} ${dis} style="margin:0;" onchange="document.getElementById('li-completion-note-wrap').style.display=this.checked?'block':'none'">
+              <span>Next action completed</span>
+              <span id="li-completed-at-inline" style="font-size:12px;color:var(--text3);font-weight:600;"></span>
+            </label>
+          </div>
+          <div class="form-group" id="li-completion-note-wrap" style="display:none;margin-top:6px;">
+            <label class="form-label">Completion Note</label>
+            <textarea id="li-completion-note-input" class="form-control" rows="2" placeholder="What did you do?" ${dis}></textarea>
           </div>
         </div>
         <div class="modal-footer">${footer}</div>
@@ -4610,49 +4673,133 @@ function renderLeadInteractionModalHtml(mode, interaction) {
 }
 
 // View-only modal for a locked lead interaction.
-function openLeadInteractionView(interactionId) {
+async function openLeadInteractionView(interactionId) {
   const i = leadInteractions.find(x => +x.id === +interactionId);
   if (!i) return;
   document.getElementById('modal-root').innerHTML = renderLeadInteractionModalHtml('view', i);
+  window._liEditing = i;
+  await loadLiNextActions();
+  preselectLiNextAction(i);
+  populateLiCompletionSection(i);
 }
 
 // Edit modal for an interaction still within the grace period.
-function openEditLeadInteractionModal(interactionId) {
+async function openEditLeadInteractionModal(interactionId) {
   const i = leadInteractions.find(x => +x.id === +interactionId);
   if (!i) return;
   document.getElementById('modal-root').innerHTML = renderLeadInteractionModalHtml('edit', i);
+  window._liEditing = i;
+  await loadLiNextActions();
+  preselectLiNextAction(i);
+  populateLiCompletionSection(i);
 }
 
-function openLeadInteractionModal() {
+async function openLeadInteractionModal() {
   if (!leadData.id) {
     showStatus('Save the lead first before logging interactions', 'error');
     return;
   }
   document.getElementById('modal-root').innerHTML = renderLeadInteractionModalHtml('new', null);
+  window._liEditing = null;
+  await loadLiNextActions();
+}
+
+// Mirror of the engagement helpers, scoped to the lead-interaction modal's li-* IDs.
+async function loadLiNextActions() {
+  try {
+    const nextActions = allData['next_actions']
+      || await apiGet('next_actions', 'active=eq.true&select=*&order=sort_order.asc,name.asc');
+    allData['next_actions'] = nextActions;
+    const sel = document.getElementById('li-next-action');
+    if (sel) {
+      const currentVal = sel.value;
+      sel.innerHTML = '<option value="">— select —</option>' +
+        nextActions.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
+      if (currentVal) sel.value = currentVal;
+    }
+  } catch(e) {
+    console.warn('Could not load next_actions lookup:', e.message);
+  }
+}
+
+function preselectLiNextAction(i) {
+  const sel = document.getElementById('li-next-action');
+  if (!sel) return;
+  if (i.next_action_id) {
+    sel.value = String(i.next_action_id);
+    if (sel.value === String(i.next_action_id)) return;
+  }
+  if (i.next_action) {
+    const opt = document.createElement('option');
+    opt.value = '__legacy__';
+    opt.textContent = i.next_action;
+    opt.dataset.legacy = '1';
+    sel.appendChild(opt);
+    sel.value = '__legacy__';
+  }
+}
+
+function populateLiCompletionSection(i) {
+  const inlineEl = document.getElementById('li-completed-at-inline');
+  const noteWrap = document.getElementById('li-completion-note-wrap');
+  const noteInput = document.getElementById('li-completion-note-input');
+  if (inlineEl) inlineEl.textContent = '';
+  if (noteWrap) noteWrap.style.display = 'none';
+  if (noteInput) noteInput.value = '';
+  if (!i?.next_action_done) return;
+
+  if (inlineEl && i.next_action_completed_at) {
+    const ts = new Date(i.next_action_completed_at);
+    inlineEl.textContent = '— ' + ts.toLocaleString('en-ZA');
+  }
+  if (noteWrap) noteWrap.style.display = 'block';
+  if (noteInput) noteInput.value = i.next_action_completion_note || '';
 }
 
 async function saveLeadInteraction(editId) {
   const date = document.getElementById('li-date').value;
   const type = document.getElementById('li-type').value;
   const notes = document.getElementById('li-notes').value.trim();
+  const naSel = document.getElementById('li-next-action');
+  const naVal = naSel?.value || '';
+  const nextActionId = naVal && naVal !== '__legacy__' && !isNaN(+naVal) ? +naVal : null;
+  const nextActionText = naVal
+    ? (naSel.options[naSel.selectedIndex]?.textContent || '').trim()
+    : '';
+  const actionDetails = document.getElementById('li-action-details')?.value || '';
+  const nextDate = document.getElementById('li-next-date')?.value || '';
+  const nextDone = document.getElementById('li-next-done')?.checked || false;
+  const completionNoteInput = (document.getElementById('li-completion-note-input')?.value || '').trim();
+
   if (!date) { showStatus('Date is required', 'error'); return; }
   if (!type) { showStatus('Type is required', 'error'); return; }
+
+  const prev = window._liEditing;
+  const completedAt = nextDone
+    ? (prev?.next_action_completed_at || new Date().toISOString())
+    : null;
+  const completionNote = nextDone ? (completionNoteInput || null) : null;
+
   try {
+    const payload = {
+      engagement_date: date,
+      engagement_type: type,
+      notes: notes || null,
+      next_action: nextActionText || null,
+      next_action_id: nextActionId,
+      action_details: actionDetails || null,
+      next_action_date: nextDate || null,
+      next_action_done: nextDone,
+      next_action_completed_at: completedAt,
+      next_action_completion_note: completionNote,
+    };
     if (editId) {
-      // Update existing — within grace period
-      await api('lead_interactions', 'PATCH', {
-        engagement_date: date,
-        engagement_type: type,
-        notes: notes || null,
-      }, 'id=eq.' + editId);
+      await api('lead_interactions', 'PATCH', payload, 'id=eq.' + editId);
       showStatus('Interaction updated');
     } else {
-      // Create new
       await api('lead_interactions', 'POST', {
+        ...payload,
         lead_id: leadData.id,
-        engagement_date: date,
-        engagement_type: type,
-        notes: notes || null,
         created_by: currentUser?.personId || null,
       }, '');
       showStatus('Interaction logged');
