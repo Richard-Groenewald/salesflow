@@ -203,7 +203,7 @@ tr:hover td{background:#F8FAFC;}
     <div id="login-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;" onclick="doLogin()">Sign In</button>
     <div style="margin-top:16px;font-size:11px;color:var(--text3);">Password disabled — test mode</div>
-    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.25</div>
+    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.26</div>
   </div>
 </div>
 
@@ -222,7 +222,7 @@ tr:hover td{background:#F8FAFC;}
       <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;" id="sidebar-user-role"></div>
       <div id="conn-status" class="conn-badge offline"><div class="conn-dot"></div> Offline</div>
       <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.25</div>
+        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.26</div>
         <button class="btn btn-sm" onclick="doLogout()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);border:none;font-size:11px;">Sign out</button>
       </div>
     </div>
@@ -664,6 +664,34 @@ tr:hover td{background:#F8FAFC;}
             <div id="lead-qual-readiness" style="font-size:14px;font-weight:600;">—</div>
           </div>
         </div>
+
+        <div class="opp-section" style="margin-top:20px;">
+          <div class="opp-section-title">Red Flags</div>
+          <div style="font-size:13px;color:var(--text2);margin-bottom:12px;">
+            Concerns that could derail the deal. Select all that apply.
+          </div>
+          <div id="lead-red-flags-selected" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;min-height:24px;"></div>
+          <div style="display:flex;gap:8px;">
+            <select id="lead-red-flag-pool" class="form-control" style="flex:1;">
+              <option value="">— add red flag —</option>
+            </select>
+            <button class="btn btn-secondary btn-sm" onclick="addLeadRedFlag()">Add</button>
+          </div>
+        </div>
+
+        <div class="opp-section" style="margin-top:20px;">
+          <div class="opp-section-title">Strategic / Executive Decisions</div>
+          <div style="font-size:13px;color:var(--text2);margin-bottom:12px;">
+            High-level decisions blocking or enabling progress. Select all that apply.
+          </div>
+          <div id="lead-strategic-decisions-selected" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;min-height:24px;"></div>
+          <div style="display:flex;gap:8px;">
+            <select id="lead-strategic-decision-pool" class="form-control" style="flex:1;">
+              <option value="">— add decision —</option>
+            </select>
+            <button class="btn btn-secondary btn-sm" onclick="addLeadStrategicDecision()">Add</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1070,6 +1098,40 @@ const PAGES = {
       { key: 'applies_to_leads',         label: 'Use for Leads',         type: 'checkbox' },
       { key: 'sort_order',               label: 'Sort Order', type: 'number' },
       { key: 'active',                   label: 'Active', type: 'checkbox' },
+    ],
+  },
+
+  red_flags: {
+    title: 'Red Flags',
+    table: 'red_flags',
+    columns: [
+      { key: 'name',        label: 'Name' },
+      { key: 'description', label: 'Description' },
+      { key: 'sort_order',  label: 'Sort Order' },
+      { key: 'active',      label: 'Active', render: v => v ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-gray">Inactive</span>' },
+    ],
+    fields: [
+      { key: 'name',        label: 'Name', required: true },
+      { key: 'description', label: 'Description', type: 'textarea' },
+      { key: 'sort_order',  label: 'Sort Order', type: 'number' },
+      { key: 'active',      label: 'Active', type: 'checkbox' },
+    ],
+  },
+
+  strategic_decisions: {
+    title: 'Strategic / Executive Decisions',
+    table: 'strategic_decisions',
+    columns: [
+      { key: 'name',        label: 'Name' },
+      { key: 'description', label: 'Description' },
+      { key: 'sort_order',  label: 'Sort Order' },
+      { key: 'active',      label: 'Active', render: v => v ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-gray">Inactive</span>' },
+    ],
+    fields: [
+      { key: 'name',        label: 'Name', required: true },
+      { key: 'description', label: 'Description', type: 'textarea' },
+      { key: 'sort_order',  label: 'Sort Order', type: 'number' },
+      { key: 'active',      label: 'Active', type: 'checkbox' },
     ],
   },
 
@@ -1539,6 +1601,10 @@ const MENU = [
             icon: '<path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>' },
           { page: 'activity_types',   label: 'Activity Types',   permission: 'manage_lookups',
             icon: '<rect x="2" y="3" width="12" height="10" rx="2"/><path d="M5 7h6M5 10h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>' },
+          { page: 'red_flags',        label: 'Red Flags',        permission: 'manage_lookups',
+            icon: '<path d="M3 2v12M3 2h9l-2 3 2 3H3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>' },
+          { page: 'strategic_decisions', label: 'Strategic Decisions', permission: 'manage_lookups',
+            icon: '<path d="M8 2v4M8 10v4M2 8h4M10 8h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="8" r="2"/>' },
         ]
       },
     ]
@@ -4175,6 +4241,7 @@ async function openLeadForm(id) {
     // Populate fields from leadData
     populateLeadForm();
     await loadLeadInteractions(id);
+    await loadLeadQualificationSelections(id);
     // Decide editability based on status. Promoted and Dead are terminal — view-only.
     const isTerminal = ['Promoted','Dead'].includes(leadData.status);
     document.getElementById('lead-page-title').textContent = isTerminal ? 'View Lead' : 'Edit Lead';
@@ -4235,6 +4302,160 @@ function closeLeadPage() {
   document.getElementById('lead-page').classList.remove('active');
 }
 
+// ── Lead Qualification multi-selects (Red Flags + Strategic Decisions) ──
+// Selections are kept in window state and synced to junction tables on save.
+window._leadRedFlags = [];
+window._leadStrategicDecisions = [];
+
+async function loadLeadQualificationLookups() {
+  const [redFlags, decisions] = await Promise.all([
+    allData['red_flags']           || apiGet('red_flags',           'active=eq.true&select=*&order=sort_order.asc,name.asc'),
+    allData['strategic_decisions'] || apiGet('strategic_decisions', 'active=eq.true&select=*&order=sort_order.asc,name.asc'),
+  ]);
+  allData['red_flags']           = redFlags;
+  allData['strategic_decisions'] = decisions;
+  refreshLeadRedFlagPool();
+  refreshLeadStrategicDecisionPool();
+}
+
+async function loadLeadQualificationSelections(leadId) {
+  if (!leadId) {
+    window._leadRedFlags = [];
+    window._leadStrategicDecisions = [];
+    renderLeadRedFlags();
+    renderLeadStrategicDecisions();
+    refreshLeadRedFlagPool();
+    refreshLeadStrategicDecisionPool();
+    return;
+  }
+  try {
+    const [rfLinks, sdLinks] = await Promise.all([
+      apiGet('lead_red_flags',           `lead_id=eq.${leadId}&select=*`),
+      apiGet('lead_strategic_decisions', `lead_id=eq.${leadId}&select=*`),
+    ]);
+    const allRf = allData['red_flags']           || [];
+    const allSd = allData['strategic_decisions'] || [];
+    window._leadRedFlags = rfLinks.map(l => {
+      const x = allRf.find(r => +r.id === +l.red_flag_id);
+      return { id: +l.red_flag_id, name: x?.name || 'Unknown' };
+    });
+    window._leadStrategicDecisions = sdLinks.map(l => {
+      const x = allSd.find(r => +r.id === +l.strategic_decision_id);
+      return { id: +l.strategic_decision_id, name: x?.name || 'Unknown' };
+    });
+  } catch(e) {
+    console.warn('Could not load lead qualification selections:', e.message);
+    window._leadRedFlags = [];
+    window._leadStrategicDecisions = [];
+  }
+  renderLeadRedFlags();
+  renderLeadStrategicDecisions();
+  refreshLeadRedFlagPool();
+  refreshLeadStrategicDecisionPool();
+}
+
+function refreshLeadRedFlagPool() {
+  const sel = document.getElementById('lead-red-flag-pool');
+  if (!sel) return;
+  const all = allData['red_flags'] || [];
+  const selectedIds = new Set(window._leadRedFlags.map(x => +x.id));
+  sel.innerHTML = '<option value="">— add red flag —</option>' +
+    all.filter(x => !selectedIds.has(+x.id))
+       .map(x => `<option value="${x.id}">${x.name}</option>`).join('');
+}
+
+function refreshLeadStrategicDecisionPool() {
+  const sel = document.getElementById('lead-strategic-decision-pool');
+  if (!sel) return;
+  const all = allData['strategic_decisions'] || [];
+  const selectedIds = new Set(window._leadStrategicDecisions.map(x => +x.id));
+  sel.innerHTML = '<option value="">— add decision —</option>' +
+    all.filter(x => !selectedIds.has(+x.id))
+       .map(x => `<option value="${x.id}">${x.name}</option>`).join('');
+}
+
+function addLeadRedFlag() {
+  const sel = document.getElementById('lead-red-flag-pool');
+  const id = +sel.value;
+  if (!id) return;
+  const item = (allData['red_flags'] || []).find(x => +x.id === id);
+  if (!item) return;
+  window._leadRedFlags.push({ id, name: item.name });
+  renderLeadRedFlags();
+  refreshLeadRedFlagPool();
+  sel.value = '';
+}
+
+function addLeadStrategicDecision() {
+  const sel = document.getElementById('lead-strategic-decision-pool');
+  const id = +sel.value;
+  if (!id) return;
+  const item = (allData['strategic_decisions'] || []).find(x => +x.id === id);
+  if (!item) return;
+  window._leadStrategicDecisions.push({ id, name: item.name });
+  renderLeadStrategicDecisions();
+  refreshLeadStrategicDecisionPool();
+  sel.value = '';
+}
+
+function removeLeadRedFlag(id) {
+  window._leadRedFlags = window._leadRedFlags.filter(x => +x.id !== +id);
+  renderLeadRedFlags();
+  refreshLeadRedFlagPool();
+}
+
+function removeLeadStrategicDecision(id) {
+  window._leadStrategicDecisions = window._leadStrategicDecisions.filter(x => +x.id !== +id);
+  renderLeadStrategicDecisions();
+  refreshLeadStrategicDecisionPool();
+}
+
+function renderLeadRedFlags() {
+  const el = document.getElementById('lead-red-flags-selected');
+  if (!el) return;
+  if (!window._leadRedFlags.length) {
+    el.innerHTML = '<span style="font-size:12px;color:var(--text3);">None selected</span>';
+    return;
+  }
+  el.innerHTML = window._leadRedFlags.map(x =>
+    `<span style="display:inline-flex;align-items:center;gap:4px;background:#D0021B;color:white;font-size:12px;padding:3px 8px;border-radius:999px;">
+      ${x.name}
+      <button onclick="removeLeadRedFlag(${x.id})" ${leadReadOnly ? 'disabled' : ''} style="background:none;border:none;color:white;cursor:${leadReadOnly ? 'default' : 'pointer'};font-size:14px;line-height:1;padding:0 2px;">×</button>
+    </span>`
+  ).join('');
+}
+
+function renderLeadStrategicDecisions() {
+  const el = document.getElementById('lead-strategic-decisions-selected');
+  if (!el) return;
+  if (!window._leadStrategicDecisions.length) {
+    el.innerHTML = '<span style="font-size:12px;color:var(--text3);">None selected</span>';
+    return;
+  }
+  el.innerHTML = window._leadStrategicDecisions.map(x =>
+    `<span style="display:inline-flex;align-items:center;gap:4px;background:var(--navy);color:white;font-size:12px;padding:3px 8px;border-radius:999px;">
+      ${x.name}
+      <button onclick="removeLeadStrategicDecision(${x.id})" ${leadReadOnly ? 'disabled' : ''} style="background:none;border:none;color:white;cursor:${leadReadOnly ? 'default' : 'pointer'};font-size:14px;line-height:1;padding:0 2px;">×</button>
+    </span>`
+  ).join('');
+}
+
+async function saveLeadQualificationSelections(leadId) {
+  if (!leadId) return;
+  try {
+    await api('lead_red_flags',           'DELETE', null, `lead_id=eq.${leadId}`);
+    await api('lead_strategic_decisions', 'DELETE', null, `lead_id=eq.${leadId}`);
+    for (const x of window._leadRedFlags) {
+      try { await api('lead_red_flags', 'POST', { lead_id: leadId, red_flag_id: x.id }, ''); } catch(e) {}
+    }
+    for (const x of window._leadStrategicDecisions) {
+      try { await api('lead_strategic_decisions', 'POST', { lead_id: leadId, strategic_decision_id: x.id }, ''); } catch(e) {}
+    }
+  } catch(e) {
+    console.warn('Failed to save lead qualification selections:', e.message);
+  }
+}
+
 function switchLeadTab(tab, btn) {
   document.querySelectorAll('#lead-page .opp-tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('#lead-page .opp-tab-content').forEach(t => t.classList.remove('active'));
@@ -4260,6 +4481,13 @@ function resetLeadForm() {
    'lead-source-detail-wrap'].forEach(id => {
     const el = document.getElementById(id); if (el) el.style.display = 'none';
   });
+  // Reset qualification multi-selects
+  window._leadRedFlags = [];
+  window._leadStrategicDecisions = [];
+  renderLeadRedFlags();
+  renderLeadStrategicDecisions();
+  refreshLeadRedFlagPool();
+  refreshLeadStrategicDecisionPool();
 }
 
 async function initLeadForm() {
@@ -4271,6 +4499,7 @@ async function initLeadForm() {
     allData['people']             || apiGet('people', 'select=*&order=first_name.asc'),
     allData['organisations']      || apiGet('organisations', 'select=*&order=name.asc'),
     apiGet('research_campaigns', 'status=eq.Active&select=*&order=name.asc'),
+    loadLeadQualificationLookups(),
   ]);
   allData['lead_sources']        = sources;
   allData['regions']             = regions;
@@ -4554,6 +4783,8 @@ async function saveLead() {
       leadData = result[0];
       showStatus('Lead created');
     }
+    // Sync junction tables for the qualification multi-selects
+    await saveLeadQualificationSelections(leadData.id);
     closeLeadPage();
     // Refresh the list
     if (currentPage === 'leads') await renderLeadsPage();
