@@ -121,6 +121,12 @@ tr:hover td{background:#F8FAFC;}
 .status-bar{position:fixed;bottom:20px;right:20px;padding:10px 16px;border-radius:var(--radius);font-size:13px;font-weight:600;display:none;z-index:99999;animation:slideIn 0.2s ease;}
 .status-bar.success{background:#ECFDF5;color:var(--green);border:1px solid #A7F3D0;display:block;}
 .status-bar.error{background:#FEF2F2;color:var(--red);border:1px solid #FECACA;display:block;}
+
+/* Brief input-acknowledgement spinner */
+.input-ack{position:fixed;bottom:68px;right:20px;width:34px;height:34px;border-radius:50%;pointer-events:none;opacity:0;transition:opacity 0.15s ease;z-index:99998;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.95);box-shadow:0 2px 8px rgba(0,0,0,0.12);}
+.input-ack.show{opacity:1;}
+.input-ack::after{content:'';width:18px;height:18px;border-radius:50%;border:2.5px solid #f3f4f6;border-top-color:var(--red);animation:spin 0.6s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
 @keyframes slideIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
 
 /* ── Connection ────────────────────────────────────────── */
@@ -203,7 +209,7 @@ tr:hover td{background:#F8FAFC;}
     <div id="login-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;" onclick="doLogin()">Sign In</button>
     <div style="margin-top:16px;font-size:11px;color:var(--text3);">Password disabled — test mode</div>
-    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.27</div>
+    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.28</div>
   </div>
 </div>
 
@@ -222,7 +228,7 @@ tr:hover td{background:#F8FAFC;}
       <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;" id="sidebar-user-role"></div>
       <div id="conn-status" class="conn-badge offline"><div class="conn-dot"></div> Offline</div>
       <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.27</div>
+        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.28</div>
         <button class="btn btn-sm" onclick="doLogout()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);border:none;font-size:11px;">Sign out</button>
       </div>
     </div>
@@ -743,6 +749,9 @@ tr:hover td{background:#F8FAFC;}
 <!-- Status Bar -->
 <div id="status-bar" class="status-bar"></div>
 
+<!-- Brief input-acknowledgement spinner (flashes on every selection-style change) -->
+<div id="input-ack" class="input-ack" aria-hidden="true"></div>
+
 <script>
 'use strict';
 
@@ -801,6 +810,32 @@ function setOnline(online) {
   el.className = `conn-badge ${online ? 'online' : 'offline'}`;
   el.innerHTML = `<div class="conn-dot"></div> ${online ? 'Online' : 'Offline'}`;
 }
+
+// ── Input acknowledgement spinner ────────────────────────
+// Brief flash whenever the user makes a selection-style change (dropdowns,
+// checkboxes, radios, date pickers). Confirms the input was received before any
+// async save runs. ~400ms total, non-blocking, fixed bottom-right.
+let inputAckTimer;
+function flashInputAck() {
+  const el = document.getElementById('input-ack');
+  if (!el) return;
+  el.classList.add('show');
+  if (inputAckTimer) clearTimeout(inputAckTimer);
+  inputAckTimer = setTimeout(() => { el.classList.remove('show'); }, 400);
+}
+
+document.addEventListener('change', (e) => {
+  const t = e.target;
+  if (!t || t.disabled) return;
+  if (t.tagName === 'SELECT') { flashInputAck(); return; }
+  if (t.tagName === 'INPUT') {
+    const ty = (t.type || '').toLowerCase();
+    // Selection-style inputs only — skip text/textarea/number (typing, not picking).
+    if (ty === 'checkbox' || ty === 'radio' || ty === 'date' || ty === 'datetime-local' || ty === 'time' || ty === 'month' || ty === 'week') {
+      flashInputAck();
+    }
+  }
+}, true);
 
 // ── Status messages ──────────────────────────────────────
 let statusTimer;
