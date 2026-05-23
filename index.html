@@ -209,7 +209,7 @@ tr:hover td{background:#F8FAFC;}
     <div id="login-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;" onclick="doLogin()">Sign In</button>
     <div style="margin-top:16px;font-size:11px;color:var(--text3);">Password disabled — test mode</div>
-    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.31</div>
+    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.32</div>
   </div>
 </div>
 
@@ -228,7 +228,7 @@ tr:hover td{background:#F8FAFC;}
       <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;" id="sidebar-user-role"></div>
       <div id="conn-status" class="conn-badge offline"><div class="conn-dot"></div> Offline</div>
       <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.31</div>
+        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.32</div>
         <button class="btn btn-sm" onclick="doLogout()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);border:none;font-size:11px;">Sign out</button>
       </div>
     </div>
@@ -4569,7 +4569,7 @@ async function initLeadForm() {
     allData['service_major']      || apiGet('service_major', 'active=eq.true&select=*&order=name.asc'),
     allData['people']             || apiGet('people', 'select=*&order=first_name.asc'),
     allData['organisations']      || apiGet('organisations', 'select=*&order=name.asc'),
-    apiGet('research_campaigns', 'status=eq.Active&select=*&order=name.asc'),
+    allData['research_campaigns'] || apiGet('research_campaigns', 'status=eq.Active&select=*&order=name.asc'),
     loadLeadQualificationLookups(),
   ]);
   allData['lead_sources']        = sources;
@@ -4914,17 +4914,9 @@ async function promoteWizardSaveRedFlag() {
 
 async function promoteWizardProgress(canProgress) {
   if (canProgress) {
-    try {
-      await api('leads', 'PATCH', {
-        promoted_at: new Date().toISOString(),
-        updated_at:  new Date().toISOString(),
-      }, 'id=eq.' + leadData.id);
-      closeModal();
-      await reloadLeadAfterServerChange();
-      showStatus('Lead promoted (deal creation to follow)');
-    } catch (e) {
-      showStatus('Could not save: ' + e.message, 'error');
-    }
+    // Hand off to Q3: confirm the organisation. promoted_at is set only when
+    // savePromoteOrg commits at the end of that flow.
+    await openPromoteOrgConfirm();
     return;
   }
   // Wake date prompt
@@ -4962,6 +4954,440 @@ async function promoteWizardSaveWake() {
     showStatus('Lead parked — will resurface ' + wake);
   } catch (e) {
     showStatus('Could not save: ' + e.message, 'error');
+  }
+}
+
+// ── Promote Q3: organisation confirmation ─────────────────
+// Two-screen modal:
+//   Screen 1: confirm colloquial + legal names, pick an existing org match
+//             or "Create new". Selection advances to screen 2.
+//   Screen 2: confirm website + address (at least one); add or pick contact
+//             person. Commit links the lead to the org and sets promoted_at.
+//
+// State is held on window._promoteOrgState across screens.
+
+function _orgMatchScore(org, colloquial, legal) {
+  // Returns: 100 = exact case-insensitive hit on either name; 0..N = token
+  // overlap score for the shortlist. Falsy candidates filtered out by caller.
+  const lc = (colloquial || '').trim().toLowerCase();
+  const ll = (legal       || '').trim().toLowerCase();
+  const on = (org.name        || '').trim().toLowerCase();
+  const oL = (org.legal_name  || '').trim().toLowerCase();
+  if ((lc && (on === lc || oL === lc)) || (ll && (on === ll || oL === ll))) return 100;
+  const tokens = new Set([lc, ll].join(' ').split(/\s+/).filter(t => t && t.length >= 3));
+  if (!tokens.size) return 0;
+  const haystack = (on + ' ' + oL).split(/\s+/).filter(Boolean);
+  let hits = 0;
+  for (const t of tokens) if (haystack.some(h => h.includes(t) || t.includes(h))) hits++;
+  return hits;
+}
+
+function _findOrgMatches(colloquial, legal) {
+  const orgs = allData['organisations'] || [];
+  const scored = orgs
+    .map(o => ({ org: o, score: _orgMatchScore(o, colloquial, legal) }))
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score);
+  const exact = scored.find(x => x.score === 100) || null;
+  const shortlist = scored.filter(x => x.score < 100).slice(0, 5).map(x => x.org);
+  return { exact: exact ? exact.org : null, shortlist };
+}
+
+async function openPromoteOrgConfirm() {
+  // Initial state — pre-fill from existing linked org if any, else from free text
+  const orgs = allData['organisations'] || [];
+  const linked = leadData.target_org_id ? orgs.find(o => +o.id === +leadData.target_org_id) : null;
+  window._promoteOrgState = {
+    colloquial: linked?.name || leadData.target_org_name || '',
+    legal:      linked?.legal_name || '',
+    selectedOrgId: linked?.id || null,   // null + isNew=false = no selection yet
+    isNew: false,
+    // screen 2 state, filled when user advances
+    website: '', address: '',
+    contactMode: 'new',
+    existingPersonId: null,
+    newPerson: { first_name: '', last_name: '', title: '', email: '', phone: '' },
+  };
+  _renderPromoteOrgScreen1();
+}
+
+function _renderPromoteOrgScreen1() {
+  const s = window._promoteOrgState;
+  const { exact, shortlist } = _findOrgMatches(s.colloquial, s.legal);
+
+  let matchHtml = '';
+  if (exact) {
+    matchHtml += `
+      <div style="padding:10px 12px;border:2px solid #16a34a;border-radius:var(--radius);background:#F0FDF4;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#166534;">Exact match</div>
+          <div style="font-weight:700;font-size:14px;margin-top:2px;">${exact.name}${exact.legal_name && exact.legal_name !== exact.name ? ` <span style="color:var(--text3);font-weight:400;">(${exact.legal_name})</span>` : ''}</div>
+        </div>
+        <button class="btn btn-primary" onclick="promoteOrgPickExisting(${exact.id})">Use this →</button>
+      </div>`;
+  }
+  if (shortlist.length) {
+    matchHtml += `<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text3);margin:10px 0 6px;">Possible matches</div>`;
+    matchHtml += shortlist.map(o => `
+      <div style="padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);background:white;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <div style="font-size:13px;">${o.name}${o.legal_name && o.legal_name !== o.name ? ` <span style="color:var(--text3);">(${o.legal_name})</span>` : ''}</div>
+        <button class="btn btn-secondary btn-sm" onclick="promoteOrgPickExisting(${o.id})">Use</button>
+      </div>`).join('');
+  }
+  if (!exact && !shortlist.length) {
+    matchHtml = `<div style="font-size:12px;color:var(--text3);padding:10px 0;">No existing organisations match these names.</div>`;
+  }
+
+  showModal(`
+    <div class="modal-overlay" onmousedown="if(event.target===this)this._md=Date.now()" onclick="if(event.target===this&&Date.now()-this._md<300)closeModal()">
+      <div class="modal" style="width:640px;max-height:90vh;display:flex;flex-direction:column;">
+        <div class="modal-header">
+          <div class="modal-title">Promote — confirm organisation (1 of 2)</div>
+          <button class="modal-close" onclick="closeModal()">×</button>
+        </div>
+        <div class="modal-body" style="overflow-y:auto;">
+          <div style="font-size:13px;color:var(--text2);margin-bottom:14px;">Confirm the client's names. If they already exist in your Organisations list, link to that record; otherwise create a new one.</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Colloquial name <span style="color:var(--red)">*</span></label>
+              <input type="text" id="promote-org-colloquial" class="form-control" value="${(s.colloquial || '').replace(/"/g,'&quot;')}" oninput="_onPromoteOrgNameInput()">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Full / legal name <span style="color:var(--red)">*</span></label>
+              <input type="text" id="promote-org-legal" class="form-control" value="${(s.legal || '').replace(/"/g,'&quot;')}" oninput="_onPromoteOrgNameInput()">
+            </div>
+          </div>
+          <div id="promote-org-matches" style="margin-top:6px;">${matchHtml}</div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="promoteOrgPickCreateNew()">Create new with these names →</button>
+        </div>
+      </div>
+    </div>
+  `);
+}
+
+function _onPromoteOrgNameInput() {
+  const s = window._promoteOrgState;
+  s.colloquial = document.getElementById('promote-org-colloquial').value;
+  s.legal      = document.getElementById('promote-org-legal').value;
+  // Just re-render the match strip, not the inputs (preserves focus)
+  const { exact, shortlist } = _findOrgMatches(s.colloquial, s.legal);
+  let html = '';
+  if (exact) {
+    html += `
+      <div style="padding:10px 12px;border:2px solid #16a34a;border-radius:var(--radius);background:#F0FDF4;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#166534;">Exact match</div>
+          <div style="font-weight:700;font-size:14px;margin-top:2px;">${exact.name}${exact.legal_name && exact.legal_name !== exact.name ? ` <span style="color:var(--text3);font-weight:400;">(${exact.legal_name})</span>` : ''}</div>
+        </div>
+        <button class="btn btn-primary" onclick="promoteOrgPickExisting(${exact.id})">Use this →</button>
+      </div>`;
+  }
+  if (shortlist.length) {
+    html += `<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text3);margin:10px 0 6px;">Possible matches</div>`;
+    html += shortlist.map(o => `
+      <div style="padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);background:white;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <div style="font-size:13px;">${o.name}${o.legal_name && o.legal_name !== o.name ? ` <span style="color:var(--text3);">(${o.legal_name})</span>` : ''}</div>
+        <button class="btn btn-secondary btn-sm" onclick="promoteOrgPickExisting(${o.id})">Use</button>
+      </div>`).join('');
+  }
+  if (!exact && !shortlist.length) {
+    html = `<div style="font-size:12px;color:var(--text3);padding:10px 0;">No existing organisations match these names.</div>`;
+  }
+  document.getElementById('promote-org-matches').innerHTML = html;
+}
+
+function promoteOrgPickExisting(orgId) {
+  const s = window._promoteOrgState;
+  s.selectedOrgId = +orgId;
+  s.isNew = false;
+  // Sync colloquial/legal/website/address from the matched org
+  const org = (allData['organisations'] || []).find(o => +o.id === +orgId);
+  if (org) {
+    s.colloquial = org.name || s.colloquial;
+    s.legal      = org.legal_name || s.legal;
+    s.website    = org.website || '';
+    s.address    = org.address || '';
+  }
+  _openPromoteOrgScreen2();
+}
+
+function promoteOrgPickCreateNew() {
+  const s = window._promoteOrgState;
+  s.colloquial = (document.getElementById('promote-org-colloquial')?.value || '').trim();
+  s.legal      = (document.getElementById('promote-org-legal')?.value      || '').trim();
+  if (!s.colloquial) { showStatus('Colloquial name is required', 'error'); return; }
+  if (!s.legal)      { showStatus('Full / legal name is required', 'error'); return; }
+  s.selectedOrgId = null;
+  s.isNew = true;
+  s.website = '';
+  s.address = '';
+  _openPromoteOrgScreen2();
+}
+
+async function _openPromoteOrgScreen2() {
+  const s = window._promoteOrgState;
+  const orgLabel = s.isNew
+    ? `<span style="color:#166534;">New organisation:</span> <strong>${s.colloquial}</strong>${s.legal && s.legal !== s.colloquial ? ` <span style="color:var(--text3);font-weight:400;">(${s.legal})</span>` : ''}`
+    : (() => {
+        const o = (allData['organisations'] || []).find(x => +x.id === +s.selectedOrgId);
+        return `<span style="color:#1e40af;">Linking to:</span> <strong>${o?.name || ''}</strong>${o?.legal_name && o.legal_name !== o.name ? ` <span style="color:var(--text3);font-weight:400;">(${o.legal_name})</span>` : ''}`;
+      })();
+
+  // Build the existing-contact candidate list:
+  //   = people affiliated with the selected org (if any)
+  //   ∪ the lead's target_person_id (if set, even when not yet affiliated)
+  // The lead's contact, if present, becomes the default selection — they're
+  // the obvious "primary" candidate. Affiliation to the org is created on
+  // commit if missing.
+  let existingContactOpts = '';
+  let contactToggleHtml = '';
+  const people = allData['people'] || [];
+  const candidatePeople = [];   // [{ person, isPrimary, fromLead }]
+  const seenIds = new Set();
+
+  if (!s.isNew && s.selectedOrgId) {
+    try {
+      const links = await apiGet('person_organisation_roles', `org_id=eq.${s.selectedOrgId}&select=person_id,role_type,is_primary`);
+      for (const l of links) {
+        const p = people.find(pp => +pp.id === +l.person_id);
+        if (p && !seenIds.has(+p.id)) {
+          candidatePeople.push({ person: p, isPrimary: !!l.is_primary, fromLead: false });
+          seenIds.add(+p.id);
+        }
+      }
+    } catch (e) {
+      console.warn('Could not load existing org contacts:', e.message);
+    }
+  }
+  // Always offer the lead's own target_person as a candidate (even for new orgs)
+  if (leadData.target_person_id) {
+    const lp = people.find(p => +p.id === +leadData.target_person_id);
+    if (lp && !seenIds.has(+lp.id)) {
+      candidatePeople.push({ person: lp, isPrimary: false, fromLead: true });
+      seenIds.add(+lp.id);
+    }
+  }
+
+  if (candidatePeople.length) {
+    // Default selection: lead's target_person if among candidates, else first
+    if (!s.existingPersonId || !candidatePeople.some(c => +c.person.id === +s.existingPersonId)) {
+      const fromLead = candidatePeople.find(c => c.fromLead);
+      s.existingPersonId = fromLead ? +fromLead.person.id : +candidatePeople[0].person.id;
+    }
+    if (!s.contactMode) s.contactMode = 'existing';
+
+    existingContactOpts = candidatePeople.map(c => {
+      const name = [c.person.first_name, c.person.last_name].filter(Boolean).join(' ');
+      const tags = [];
+      if (c.isPrimary) tags.push('Primary');
+      if (c.fromLead)  tags.push('from lead');
+      const tagStr = tags.length ? ` (${tags.join(', ')})` : '';
+      const sel = (+c.person.id === +s.existingPersonId) ? 'selected' : '';
+      return `<option value="${c.person.id}" ${sel}>${name}${tagStr}</option>`;
+    }).join('');
+    contactToggleHtml = `
+      <div style="display:flex;gap:14px;margin-bottom:10px;font-size:12px;">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="radio" name="promote-contact-mode" value="existing" ${s.contactMode==='existing'?'checked':''} onchange="_setPromoteContactMode('existing')">
+          Use existing contact
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="radio" name="promote-contact-mode" value="new" ${s.contactMode==='new'?'checked':''} onchange="_setPromoteContactMode('new')">
+          Add new contact
+        </label>
+      </div>`;
+  } else {
+    s.contactMode = 'new';
+  }
+
+  const np = s.newPerson;
+  const existingBlock = `
+    <div id="promote-contact-existing" style="display:${s.contactMode==='existing'?'block':'none'};">
+      <label class="form-label">Existing contact</label>
+      <select id="promote-existing-person-id" class="form-control" onchange="window._promoteOrgState.existingPersonId = +this.value">
+        ${existingContactOpts}
+      </select>
+    </div>`;
+  const newBlock = `
+    <div id="promote-contact-new" style="display:${s.contactMode==='new'?'block':'none'};">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">First name <span style="color:var(--red)">*</span></label>
+          <input type="text" id="promote-person-first" class="form-control" value="${(np.first_name||'').replace(/"/g,'&quot;')}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Last name</label>
+          <input type="text" id="promote-person-last" class="form-control" value="${(np.last_name||'').replace(/"/g,'&quot;')}">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Title</label>
+          <select id="promote-person-title" class="form-control">
+            ${['','Mr','Mrs','Ms','Dr','Prof'].map(t => `<option value="${t}" ${np.title===t?'selected':''}>${t || '—'}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" id="promote-person-email" class="form-control" value="${(np.email||'').replace(/"/g,'&quot;')}">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Phone</label>
+        <input type="text" id="promote-person-phone" class="form-control" value="${(np.phone||'').replace(/"/g,'&quot;')}">
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:-6px;">Email <strong>or</strong> phone is required.</div>
+    </div>`;
+
+  showModal(`
+    <div class="modal-overlay" onmousedown="if(event.target===this)this._md=Date.now()" onclick="if(event.target===this&&Date.now()-this._md<300)closeModal()">
+      <div class="modal" style="width:680px;max-height:90vh;display:flex;flex-direction:column;">
+        <div class="modal-header">
+          <div class="modal-title">Promote — confirm details (2 of 2)</div>
+          <button class="modal-close" onclick="closeModal()">×</button>
+        </div>
+        <div class="modal-body" style="overflow-y:auto;">
+          <div style="font-size:13px;margin-bottom:14px;">${orgLabel}</div>
+
+          <div class="opp-section-title" style="font-size:11px;margin-bottom:8px;">Organisation contact details</div>
+          <div class="form-group">
+            <label class="form-label">Website</label>
+            <input type="url" id="promote-org-website" class="form-control" placeholder="https://…" value="${(s.website||'').replace(/"/g,'&quot;')}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Address</label>
+            <textarea id="promote-org-address" class="form-control" rows="2" placeholder="Street, suburb, city">${(s.address||'').replace(/</g,'&lt;')}</textarea>
+          </div>
+          <div style="font-size:11px;color:var(--text3);margin-top:-6px;margin-bottom:18px;">Website <strong>or</strong> address is required. Both is best.</div>
+
+          <div class="opp-section-title" style="font-size:11px;margin-bottom:8px;">Primary contact</div>
+          ${contactToggleHtml}
+          ${existingBlock}
+          ${newBlock}
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="_renderPromoteOrgScreen1()">← Back</button>
+          <button class="btn btn-primary"   onclick="savePromoteOrg()">Promote lead</button>
+        </div>
+      </div>
+    </div>
+  `);
+}
+
+function _setPromoteContactMode(mode) {
+  window._promoteOrgState.contactMode = mode;
+  const ex = document.getElementById('promote-contact-existing');
+  const nw = document.getElementById('promote-contact-new');
+  if (ex) ex.style.display = (mode === 'existing') ? 'block' : 'none';
+  if (nw) nw.style.display = (mode === 'new')      ? 'block' : 'none';
+  if (mode === 'existing') {
+    const sel = document.getElementById('promote-existing-person-id');
+    window._promoteOrgState.existingPersonId = sel ? +sel.value : null;
+  }
+}
+
+async function savePromoteOrg() {
+  const s = window._promoteOrgState;
+
+  // Pull current field values
+  const website = (document.getElementById('promote-org-website')?.value || '').trim();
+  const address = (document.getElementById('promote-org-address')?.value || '').trim();
+  if (!website && !address) {
+    showStatus('Website or address is required', 'error');
+    return;
+  }
+  s.website = website;
+  s.address = address;
+
+  // Resolve contact person
+  let personId = null;
+  if (s.contactMode === 'existing') {
+    personId = s.existingPersonId || +(document.getElementById('promote-existing-person-id')?.value || 0);
+    if (!personId) { showStatus('Pick an existing contact', 'error'); return; }
+  } else {
+    const np = {
+      first_name: (document.getElementById('promote-person-first')?.value || '').trim(),
+      last_name:  (document.getElementById('promote-person-last')?.value  || '').trim(),
+      title:      (document.getElementById('promote-person-title')?.value || '').trim(),
+      email:      (document.getElementById('promote-person-email')?.value || '').trim(),
+      phone:      (document.getElementById('promote-person-phone')?.value || '').trim(),
+    };
+    if (!np.first_name)           { showStatus('Contact first name is required', 'error'); return; }
+    if (!np.email && !np.phone)   { showStatus('Contact email or phone is required', 'error'); return; }
+    s.newPerson = np;
+  }
+
+  try {
+    // 1. Org: create or update
+    let orgId = s.selectedOrgId;
+    if (s.isNew) {
+      const orgPayload = {
+        name:       s.colloquial,
+        legal_name: s.legal,
+        website:    website || null,
+        address:    address || null,
+      };
+      const createdOrg = await api('organisations', 'POST', orgPayload, 'select=*');
+      orgId = createdOrg[0].id;
+      // Keep client cache in sync so future match strips include it
+      (allData['organisations'] = allData['organisations'] || []).push(createdOrg[0]);
+    } else {
+      // Patch only if anything changed — minimise writes
+      const current = (allData['organisations'] || []).find(o => +o.id === +orgId) || {};
+      const patch = {};
+      if (s.colloquial && s.colloquial !== current.name)        patch.name        = s.colloquial;
+      if (s.legal      && s.legal      !== current.legal_name)  patch.legal_name  = s.legal;
+      if (website      && website      !== (current.website || ''))  patch.website  = website;
+      if (address      && address      !== (current.address || ''))  patch.address  = address;
+      if (Object.keys(patch).length) {
+        const patched = await api('organisations', 'PATCH', patch, `id=eq.${orgId}&select=*`);
+        // Update cache
+        const idx = (allData['organisations'] || []).findIndex(o => +o.id === +orgId);
+        if (idx >= 0 && patched[0]) allData['organisations'][idx] = patched[0];
+      }
+    }
+
+    // 2. Person: create if new
+    if (s.contactMode === 'new') {
+      const created = await api('people', 'POST', s.newPerson, 'select=*');
+      personId = created[0].id;
+      (allData['people'] = allData['people'] || []).push(created[0]);
+    }
+
+    // 3. Affiliation: only create if missing
+    const existingLinks = await apiGet('person_organisation_roles', `person_id=eq.${personId}&org_id=eq.${orgId}&select=id`);
+    if (!existingLinks.length) {
+      // Check whether the org already has any primary contact
+      const primaryLinks = await apiGet('person_organisation_roles', `org_id=eq.${orgId}&is_primary=eq.true&select=id`);
+      const isPrimary = primaryLinks.length === 0;
+      await api('person_organisation_roles', 'POST', {
+        person_id:  personId,
+        org_id:     +orgId,
+        role_type:  'Contact',
+        is_primary: isPrimary,
+      }, '');
+    }
+
+    // 4. Lead: link the org and mark promoted. The contact chosen in Q3 wins
+    //    over the lead's prior target_person_id — that's the whole point of the
+    //    confirmation step.
+    await api('leads', 'PATCH', {
+      target_org_id:     +orgId,
+      target_org_name:   null,                     // FK wins; clear the free-text fallback
+      target_person_id:  +personId,
+      target_person_name: null,
+      promoted_at:       new Date().toISOString(),
+      updated_at:        new Date().toISOString(),
+    }, 'id=eq.' + leadData.id);
+
+    closeModal();
+    await reloadLeadAfterServerChange();
+    showStatus('Lead promoted — ' + (s.isNew ? 'new organisation created' : 'linked to existing organisation'));
+  } catch (e) {
+    showStatus('Could not promote: ' + e.message, 'error');
   }
 }
 
