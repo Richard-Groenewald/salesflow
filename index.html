@@ -209,7 +209,7 @@ tr:hover td{background:#F8FAFC;}
     <div id="login-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;" onclick="doLogin()">Sign In</button>
     <div style="margin-top:16px;font-size:11px;color:var(--text3);">Password disabled — test mode</div>
-    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.32</div>
+    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.33</div>
   </div>
 </div>
 
@@ -228,7 +228,7 @@ tr:hover td{background:#F8FAFC;}
       <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;" id="sidebar-user-role"></div>
       <div id="conn-status" class="conn-badge offline"><div class="conn-dot"></div> Offline</div>
       <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.32</div>
+        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.33</div>
         <button class="btn btn-sm" onclick="doLogout()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);border:none;font-size:11px;">Sign out</button>
       </div>
     </div>
@@ -4368,6 +4368,10 @@ function applyLeadReadOnly(on) {
 
 function closeLeadPage() {
   document.getElementById('lead-page').classList.remove('active');
+  // Re-render the leads list so tab counts and rows reflect any status changes
+  // that happened via wizard, decline modal, red-flag tag, or interaction logs.
+  // Cheap: 1 fresh leads fetch; lookups are cached after first load.
+  if (currentPage === 'leads') renderLeadsPage();
 }
 
 // ── Lead Qualification multi-selects (Red Flags + Strategic Decisions) ──
@@ -4915,7 +4919,7 @@ async function promoteWizardSaveRedFlag() {
 async function promoteWizardProgress(canProgress) {
   if (canProgress) {
     // Hand off to Q3: confirm the organisation. promoted_at is set only when
-    // savePromoteOrg commits at the end of that flow.
+    // savePromoteAll commits at the end of the wizard (Q4 screen 2).
     await openPromoteOrgConfirm();
     return;
   }
@@ -5270,11 +5274,39 @@ async function _openPromoteOrgScreen2() {
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="_renderPromoteOrgScreen1()">← Back</button>
-          <button class="btn btn-primary"   onclick="savePromoteOrg()">Promote lead</button>
+          <button class="btn btn-primary"   onclick="_promoteCaptureOrgScreen2AndContinue()">Continue →</button>
         </div>
       </div>
     </div>
   `);
+}
+
+// Captures the screen-2 inputs into _promoteOrgState, then opens Q4.
+function _promoteCaptureOrgScreen2AndContinue() {
+  const s = window._promoteOrgState;
+  const website = (document.getElementById('promote-org-website')?.value || '').trim();
+  const address = (document.getElementById('promote-org-address')?.value || '').trim();
+  if (!website && !address) { showStatus('Website or address is required', 'error'); return; }
+  s.website = website;
+  s.address = address;
+
+  if (s.contactMode === 'existing') {
+    const sel = document.getElementById('promote-existing-person-id');
+    s.existingPersonId = sel ? +sel.value : s.existingPersonId;
+    if (!s.existingPersonId) { showStatus('Pick an existing contact', 'error'); return; }
+  } else {
+    s.newPerson = {
+      first_name: (document.getElementById('promote-person-first')?.value || '').trim(),
+      last_name:  (document.getElementById('promote-person-last')?.value  || '').trim(),
+      title:      (document.getElementById('promote-person-title')?.value || '').trim(),
+      email:      (document.getElementById('promote-person-email')?.value || '').trim(),
+      phone:      (document.getElementById('promote-person-phone')?.value || '').trim(),
+    };
+    if (!s.newPerson.first_name)                       { showStatus('Contact first name is required', 'error'); return; }
+    if (!s.newPerson.email && !s.newPerson.phone)      { showStatus('Contact email or phone is required', 'error'); return; }
+  }
+
+  openPromoteQ4Screen1();
 }
 
 function _setPromoteContactMode(mode) {
@@ -5289,103 +5321,448 @@ function _setPromoteContactMode(mode) {
   }
 }
 
-async function savePromoteOrg() {
+// ── Promote Q4: deal name + first action obligation, then revenue stream ──
+// State extension on _promoteOrgState:
+//   q4: {
+//     dealName, nextActionId, nextActionText, nextActionDate, actionDetails,
+//     serviceSubId, isRecurring, orderDate, startDate,
+//     monthlyValue, totalValue, durationMonths
+//   }
+
+function _addWorkingDays(date, days) {
+  const d = new Date(date);
+  let added = 0;
+  while (added < days) {
+    d.setDate(d.getDate() + 1);
+    const wd = d.getDay();
+    if (wd !== 0 && wd !== 6) added++;
+  }
+  return d.toISOString().slice(0,10);
+}
+
+async function openPromoteQ4Screen1() {
   const s = window._promoteOrgState;
 
-  // Pull current field values
-  const website = (document.getElementById('promote-org-website')?.value || '').trim();
-  const address = (document.getElementById('promote-org-address')?.value || '').trim();
-  if (!website && !address) {
-    showStatus('Website or address is required', 'error');
+  // Initialise q4 if not yet present
+  if (!s.q4) {
+    const org = s.isNew
+      ? { name: s.colloquial }
+      : (allData['organisations'] || []).find(o => +o.id === +s.selectedOrgId) || { name: s.colloquial };
+    const serviceMajors = allData['service_major'] || [];
+    const major = serviceMajors.find(m => +m.id === +leadData.service_major_id);
+    s.q4 = {
+      dealName: `${org.name} — ${major?.name || ''}`.trim().replace(/—\s*$/, '').trim(),
+      nextActionId: null,
+      nextActionText: '',
+      nextActionDate: _addWorkingDays(new Date(), 3),
+      actionDetails: '',
+      serviceSubId: null,
+      isRecurring: null,
+      orderDate: '',
+      startDate: '',
+      monthlyValue: '',
+      totalValue: leadData.est_value || '',
+      durationMonths: '',
+    };
+  }
+
+  // Load next_actions filtered to opportunities (cache once loaded)
+  if (!allData['_next_actions_opps']) {
+    try {
+      allData['_next_actions_opps'] = await apiGet('next_actions',
+        'applies_to_opportunities=eq.true&active=eq.true&select=*&order=sort_order.asc,name.asc');
+    } catch (e) {
+      allData['_next_actions_opps'] = [];
+      console.warn('Could not load opportunity next actions:', e.message);
+    }
+  }
+  const nextActions = allData['_next_actions_opps'] || [];
+  const naOpts = '<option value="">— select —</option>' +
+    nextActions.map(n => `<option value="${n.id}" ${+s.q4.nextActionId===+n.id?'selected':''}>${n.name}</option>`).join('');
+
+  showModal(`
+    <div class="modal-overlay" onmousedown="if(event.target===this)this._md=Date.now()" onclick="if(event.target===this&&Date.now()-this._md<300)closeModal()">
+      <div class="modal" style="width:640px;max-height:90vh;display:flex;flex-direction:column;">
+        <div class="modal-header">
+          <div class="modal-title">Promote — deal &amp; first action (3 of 4)</div>
+          <button class="modal-close" onclick="closeModal()">×</button>
+        </div>
+        <div class="modal-body" style="overflow-y:auto;">
+          <div style="font-size:13px;color:var(--text2);margin-bottom:14px;">Name the new deal and lock in your first commitment.</div>
+
+          <div class="form-group">
+            <label class="form-label">Deal name <span style="color:var(--red)">*</span></label>
+            <input type="text" id="promote-deal-name" class="form-control" value="${(s.q4.dealName||'').replace(/"/g,'&quot;')}">
+          </div>
+
+          <div class="opp-section-title" style="font-size:11px;margin:14px 0 8px;">First action obligation</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Next action <span style="color:var(--red)">*</span></label>
+              <select id="promote-q4-next-action-id" class="form-control" onchange="_onPromoteQ4NextActionChange()">${naOpts}</select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Due date <span style="color:var(--red)">*</span></label>
+              <input type="date" id="promote-q4-next-date" class="form-control" value="${s.q4.nextActionDate || ''}" min="${new Date().toISOString().slice(0,10)}">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Action details</label>
+            <textarea id="promote-q4-action-details" class="form-control" rows="2" placeholder="Anything that clarifies what 'next' means…">${(s.q4.actionDetails||'').replace(/</g,'&lt;')}</textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="_openPromoteOrgScreen2()">← Back</button>
+          <button class="btn btn-primary"   onclick="_promoteCaptureQ4Screen1AndContinue()">Continue →</button>
+        </div>
+      </div>
+    </div>
+  `);
+}
+
+function _onPromoteQ4NextActionChange() {
+  const sel = document.getElementById('promote-q4-next-action-id');
+  const id = sel ? +sel.value : 0;
+  const list = allData['_next_actions_opps'] || [];
+  const row = list.find(n => +n.id === id);
+  window._promoteOrgState.q4.nextActionId   = id || null;
+  window._promoteOrgState.q4.nextActionText = row ? row.name : '';
+}
+
+function _promoteCaptureQ4Screen1AndContinue() {
+  const s = window._promoteOrgState;
+  const dealName       = (document.getElementById('promote-deal-name')?.value         || '').trim();
+  const nextActionId   = +(document.getElementById('promote-q4-next-action-id')?.value || 0);
+  const nextActionDate = (document.getElementById('promote-q4-next-date')?.value       || '').trim();
+  const actionDetails  = (document.getElementById('promote-q4-action-details')?.value  || '').trim();
+
+  if (!dealName)       { showStatus('Deal name is required', 'error'); return; }
+  if (!nextActionId)   { showStatus('Pick a next action', 'error'); return; }
+  if (!nextActionDate) { showStatus('Due date is required', 'error'); return; }
+
+  const list = allData['_next_actions_opps'] || [];
+  const row = list.find(n => +n.id === nextActionId);
+  s.q4.dealName       = dealName;
+  s.q4.nextActionId   = nextActionId;
+  s.q4.nextActionText = row ? row.name : '';
+  s.q4.nextActionDate = nextActionDate;
+  s.q4.actionDetails  = actionDetails;
+
+  openPromoteQ4Screen2();
+}
+
+async function openPromoteQ4Screen2() {
+  const s = window._promoteOrgState;
+
+  // service_sub filtered to the lead's service_major
+  if (!allData['service_sub_all']) {
+    try {
+      allData['service_sub_all'] = await apiGet('service_sub', 'active=eq.true&select=*&order=name.asc');
+    } catch (e) {
+      allData['service_sub_all'] = [];
+      console.warn('Could not load service sub:', e.message);
+    }
+  }
+  const subs = (allData['service_sub_all'] || []).filter(s2 => +s2.major_id === +leadData.service_major_id);
+  const subOpts = '<option value="">— select —</option>' +
+    subs.map(s2 => `<option value="${s2.id}" data-recurring="${s2.is_recurring?1:0}" data-margin="${s2.default_margin||25}" data-duration="${s2.default_duration||0}" ${+s.q4.serviceSubId===+s2.id?'selected':''}>${s2.name}${s2.is_recurring?' (recurring)':' (project)'}</option>`).join('');
+
+  // Default order/start dates if not set
+  if (!s.q4.orderDate) s.q4.orderDate = new Date().toISOString().slice(0,10);
+  if (!s.q4.startDate) {
+    const d = new Date(); d.setMonth(d.getMonth() + 1); d.setDate(1);
+    s.q4.startDate = d.toISOString().slice(0,10);
+  }
+
+  // Recurring vs non-recurring panels — visibility driven by selected sub
+  const sub = subs.find(s2 => +s2.id === +s.q4.serviceSubId);
+  const isRec = sub ? !!sub.is_recurring : null;
+  if (isRec !== null) s.q4.isRecurring = isRec;
+  if (sub && !s.q4.durationMonths) s.q4.durationMonths = sub.default_duration || (isRec ? 12 : 3);
+
+  showModal(`
+    <div class="modal-overlay" onmousedown="if(event.target===this)this._md=Date.now()" onclick="if(event.target===this&&Date.now()-this._md<300)closeModal()">
+      <div class="modal" style="width:680px;max-height:90vh;display:flex;flex-direction:column;">
+        <div class="modal-header">
+          <div class="modal-title">Promote — revenue stream (4 of 4)</div>
+          <button class="modal-close" onclick="closeModal()">×</button>
+        </div>
+        <div class="modal-body" style="overflow-y:auto;">
+          <div style="font-size:13px;color:var(--text2);margin-bottom:14px;">Capture the financial picture so this deal has real numbers from day one.</div>
+
+          <div class="form-group">
+            <label class="form-label">Service type <span style="color:var(--red)">*</span></label>
+            <select id="promote-q4-service-sub" class="form-control" onchange="_onPromoteQ4ServiceSubChange()">${subOpts}</select>
+            <div style="font-size:11px;color:var(--text3);margin-top:4px;">Drives recurring vs project, default margin, and default duration.</div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Expected order date <span style="color:var(--red)">*</span></label>
+              <input type="date" id="promote-q4-order-date" class="form-control" value="${s.q4.orderDate || ''}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Service start date <span style="color:var(--red)">*</span></label>
+              <input type="date" id="promote-q4-start-date" class="form-control" value="${s.q4.startDate || ''}">
+            </div>
+          </div>
+
+          <div id="promote-q4-recurring" style="display:${s.q4.isRecurring===true?'block':'none'};">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Monthly value (ZAR) <span style="color:var(--red)">*</span></label>
+                <input type="number" id="promote-q4-monthly" class="form-control" step="100" value="${s.q4.monthlyValue||''}">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Duration (months) <span style="color:var(--red)">*</span></label>
+                <input type="number" id="promote-q4-duration-rec" class="form-control" step="1" min="1" value="${s.q4.durationMonths||''}">
+              </div>
+            </div>
+            <div style="font-size:11px;color:var(--text3);margin-top:-6px;">Generates N month rows at the monthly value, starting from the service start date.</div>
+          </div>
+
+          <div id="promote-q4-nonrecurring" style="display:${s.q4.isRecurring===false?'block':'none'};">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Total project value (ZAR) <span style="color:var(--red)">*</span></label>
+                <input type="number" id="promote-q4-total" class="form-control" step="100" value="${s.q4.totalValue||''}">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Delivery window (months) <span style="color:var(--red)">*</span></label>
+                <input type="number" id="promote-q4-duration-proj" class="form-control" step="1" min="1" value="${s.q4.durationMonths||''}">
+              </div>
+            </div>
+            <div style="font-size:11px;color:var(--text3);margin-top:-6px;">Total splits evenly across the delivery window starting at service start date.</div>
+          </div>
+
+          <div id="promote-q4-pick-sub-hint" style="display:${sub?'none':'block'};font-size:12px;color:var(--text3);padding:14px 0;">Pick a service type to see value &amp; duration fields.</div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="openPromoteQ4Screen1()">← Back</button>
+          <button class="btn btn-primary"   onclick="savePromoteAll()">Promote lead →</button>
+        </div>
+      </div>
+    </div>
+  `);
+}
+
+function _onPromoteQ4ServiceSubChange() {
+  const sel = document.getElementById('promote-q4-service-sub');
+  const opt = sel?.selectedOptions[0];
+  const s = window._promoteOrgState;
+  if (!opt || !opt.value) {
+    s.q4.serviceSubId = null;
+    s.q4.isRecurring = null;
+    document.getElementById('promote-q4-recurring').style.display = 'none';
+    document.getElementById('promote-q4-nonrecurring').style.display = 'none';
+    document.getElementById('promote-q4-pick-sub-hint').style.display = 'block';
     return;
   }
-  s.website = website;
-  s.address = address;
+  s.q4.serviceSubId = +opt.value;
+  s.q4.isRecurring  = opt.dataset.recurring === '1';
+  s.q4.marginPct    = +opt.dataset.margin || 25;
+  if (!s.q4.durationMonths) s.q4.durationMonths = +opt.dataset.duration || (s.q4.isRecurring ? 12 : 3);
 
-  // Resolve contact person
-  let personId = null;
-  if (s.contactMode === 'existing') {
-    personId = s.existingPersonId || +(document.getElementById('promote-existing-person-id')?.value || 0);
-    if (!personId) { showStatus('Pick an existing contact', 'error'); return; }
+  document.getElementById('promote-q4-pick-sub-hint').style.display = 'none';
+  document.getElementById('promote-q4-recurring').style.display    = s.q4.isRecurring ? 'block' : 'none';
+  document.getElementById('promote-q4-nonrecurring').style.display = s.q4.isRecurring ? 'none' : 'block';
+
+  // Re-render duration default into the visible field
+  if (s.q4.isRecurring) {
+    const f = document.getElementById('promote-q4-duration-rec');
+    if (f && !f.value) f.value = s.q4.durationMonths;
   } else {
-    const np = {
-      first_name: (document.getElementById('promote-person-first')?.value || '').trim(),
-      last_name:  (document.getElementById('promote-person-last')?.value  || '').trim(),
-      title:      (document.getElementById('promote-person-title')?.value || '').trim(),
-      email:      (document.getElementById('promote-person-email')?.value || '').trim(),
-      phone:      (document.getElementById('promote-person-phone')?.value || '').trim(),
-    };
-    if (!np.first_name)           { showStatus('Contact first name is required', 'error'); return; }
-    if (!np.email && !np.phone)   { showStatus('Contact email or phone is required', 'error'); return; }
-    s.newPerson = np;
+    const f = document.getElementById('promote-q4-duration-proj');
+    if (f && !f.value) f.value = s.q4.durationMonths;
   }
+}
+// Full promotion commit: org/person/affiliation/deal/collaborator/contact/stream/months/engagement/lead.
+// Called from Q4 screen 2 — reads & validates the revenue-stream fields, then does the chain.
+async function savePromoteAll() {
+  const s = window._promoteOrgState;
+  if (!s?.q4) { showStatus('Wizard state lost — start again', 'error'); return; }
+
+  // — Capture & validate Q4 screen 2 (revenue stream) —
+  const subId    = +(document.getElementById('promote-q4-service-sub')?.value || 0);
+  const orderDt  = (document.getElementById('promote-q4-order-date')?.value || '').trim();
+  const startDt  = (document.getElementById('promote-q4-start-date')?.value || '').trim();
+  if (!subId)   { showStatus('Pick a service type', 'error'); return; }
+  if (!orderDt) { showStatus('Expected order date is required', 'error'); return; }
+  if (!startDt) { showStatus('Service start date is required', 'error'); return; }
+
+  const subRow = (allData['service_sub_all'] || []).find(x => +x.id === subId);
+  if (!subRow) { showStatus('Service type not found — refresh and try again', 'error'); return; }
+  const isRec  = !!subRow.is_recurring;
+  const margin = +subRow.default_margin || 25;
+
+  let durationMonths, monthValues; // monthValues = array of revenue values per month
+  if (isRec) {
+    const monthly  = +(document.getElementById('promote-q4-monthly')?.value || 0);
+    const duration = +(document.getElementById('promote-q4-duration-rec')?.value || 0);
+    if (!monthly || monthly <= 0)    { showStatus('Monthly value is required',  'error'); return; }
+    if (!duration || duration <= 0)  { showStatus('Duration is required',       'error'); return; }
+    durationMonths = duration;
+    monthValues = Array(duration).fill(monthly);
+  } else {
+    const total    = +(document.getElementById('promote-q4-total')?.value || 0);
+    const duration = +(document.getElementById('promote-q4-duration-proj')?.value || 0);
+    if (!total || total <= 0)        { showStatus('Total project value is required', 'error'); return; }
+    if (!duration || duration <= 0)  { showStatus('Delivery window is required',     'error'); return; }
+    durationMonths = duration;
+    // Split evenly, with the remainder added to the final month so the sum matches exactly.
+    const base = Math.floor((total / duration) * 100) / 100;
+    monthValues = Array(duration).fill(base);
+    const remainder = Math.round((total - base * duration) * 100) / 100;
+    if (remainder) monthValues[duration - 1] = Math.round((monthValues[duration - 1] + remainder) * 100) / 100;
+  }
+  s.q4.serviceSubId   = subId;
+  s.q4.isRecurring    = isRec;
+  s.q4.marginPct      = margin;
+  s.q4.orderDate      = orderDt;
+  s.q4.startDate      = startDt;
+  s.q4.durationMonths = durationMonths;
 
   try {
-    // 1. Org: create or update
+    // === 1. Org: create or update ============================
     let orgId = s.selectedOrgId;
     if (s.isNew) {
-      const orgPayload = {
-        name:       s.colloquial,
-        legal_name: s.legal,
-        website:    website || null,
-        address:    address || null,
-      };
-      const createdOrg = await api('organisations', 'POST', orgPayload, 'select=*');
+      const createdOrg = await api('organisations', 'POST', {
+        name: s.colloquial, legal_name: s.legal,
+        website: s.website || null, address: s.address || null,
+      }, 'select=*');
       orgId = createdOrg[0].id;
-      // Keep client cache in sync so future match strips include it
       (allData['organisations'] = allData['organisations'] || []).push(createdOrg[0]);
     } else {
-      // Patch only if anything changed — minimise writes
       const current = (allData['organisations'] || []).find(o => +o.id === +orgId) || {};
       const patch = {};
-      if (s.colloquial && s.colloquial !== current.name)        patch.name        = s.colloquial;
-      if (s.legal      && s.legal      !== current.legal_name)  patch.legal_name  = s.legal;
-      if (website      && website      !== (current.website || ''))  patch.website  = website;
-      if (address      && address      !== (current.address || ''))  patch.address  = address;
+      if (s.colloquial && s.colloquial !== current.name)              patch.name        = s.colloquial;
+      if (s.legal      && s.legal      !== current.legal_name)        patch.legal_name  = s.legal;
+      if (s.website    && s.website    !== (current.website || ''))   patch.website     = s.website;
+      if (s.address    && s.address    !== (current.address || ''))   patch.address     = s.address;
       if (Object.keys(patch).length) {
         const patched = await api('organisations', 'PATCH', patch, `id=eq.${orgId}&select=*`);
-        // Update cache
         const idx = (allData['organisations'] || []).findIndex(o => +o.id === +orgId);
         if (idx >= 0 && patched[0]) allData['organisations'][idx] = patched[0];
       }
     }
 
-    // 2. Person: create if new
+    // === 2. Person: create if new ============================
+    let personId = s.existingPersonId;
     if (s.contactMode === 'new') {
       const created = await api('people', 'POST', s.newPerson, 'select=*');
       personId = created[0].id;
       (allData['people'] = allData['people'] || []).push(created[0]);
     }
 
-    // 3. Affiliation: only create if missing
+    // === 3. Org affiliation: only create if missing ==========
     const existingLinks = await apiGet('person_organisation_roles', `person_id=eq.${personId}&org_id=eq.${orgId}&select=id`);
     if (!existingLinks.length) {
-      // Check whether the org already has any primary contact
       const primaryLinks = await apiGet('person_organisation_roles', `org_id=eq.${orgId}&is_primary=eq.true&select=id`);
-      const isPrimary = primaryLinks.length === 0;
       await api('person_organisation_roles', 'POST', {
-        person_id:  personId,
-        org_id:     +orgId,
-        role_type:  'Contact',
-        is_primary: isPrimary,
+        person_id: personId, org_id: +orgId,
+        role_type: 'Contact', is_primary: primaryLinks.length === 0,
       }, '');
     }
 
-    // 4. Lead: link the org and mark promoted. The contact chosen in Q3 wins
-    //    over the lead's prior target_person_id — that's the whole point of the
-    //    confirmation step.
+    // === 4. Deal ============================================
+    // Resolve the first stage in the 'Opportunity-Open' category
+    if (!allData['stages'])           allData['stages']           = await apiGet('stages',           'active=eq.true&select=*&order=sort_order.asc');
+    if (!allData['stage_categories']) allData['stage_categories'] = await apiGet('stage_categories', 'select=*');
+    const openCat = (allData['stage_categories'] || []).find(c => c.name === 'Opportunity-Open');
+    const firstStage = openCat
+      ? (allData['stages'] || []).filter(st => +st.category_id === +openCat.id).sort((a,b) => a.sort_order - b.sort_order)[0]
+      : null;
+    if (!firstStage) { showStatus('No Opportunity-Open stage found — set one in Lookups', 'error'); return; }
+
+    const dealPayload = {
+      name:             s.q4.dealName,
+      org_id:           +orgId,
+      region_id:        leadData.region_id || null,
+      stage_id:         +firstStage.id,
+      service_major_id: leadData.service_major_id || null,
+      service_sub_id:   +subId,
+      margin_pct:       margin,
+      order_date:       orderDt,
+      start_date:       startDt,
+      notes:            leadData.description || null,
+      owner_id:         leadData.owner_id || null,
+      created_by:       currentUser?.personId || null,
+    };
+    const createdDeal = await api('deals', 'POST', dealPayload, 'select=*');
+    const dealId = createdDeal[0].id;
+
+    // === 5. Deal collaborators: owner ========================
+    if (leadData.owner_id) {
+      try {
+        await api('deal_collaborators', 'POST', {
+          deal_id: dealId, person_id: +leadData.owner_id,
+          role: 'Owner', is_owner: true,
+        }, '');
+      } catch (e) { console.warn('Could not add owner collaborator:', e.message); }
+    }
+
+    // === 6. Deal contact: the Q3 contact =====================
+    try {
+      await api('opportunity_contacts', 'POST', {
+        deal_id: dealId, person_id: +personId,
+        dmu_role_id: null, note: '',
+      }, '');
+    } catch (e) { console.warn('Could not add deal contact:', e.message); }
+
+    // === 7. Revenue stream + months ==========================
+    const stream = await api('revenue_streams', 'POST', {
+      deal_id: dealId, stream_type: 'opportunity', locked: false,
+    }, 'select=*');
+    const streamId = stream[0].id;
+    const startDate = new Date(startDt);
+    for (let i = 0; i < monthValues.length; i++) {
+      const m = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1);
+      const monthStr = m.toISOString().slice(0,7) + '-01';
+      const revenue  = +monthValues[i];
+      const marginR  = Math.round((revenue * margin / 100) * 100) / 100;
+      await api('revenue_stream_months', 'POST', {
+        stream_id: streamId, month: monthStr,
+        opportunity_revenue: revenue, opportunity_margin: marginR,
+      }, '');
+    }
+
+    // === 8. Engagement: Q4 first-action obligation ===========
+    // Try to find a 'Promotion' activity_type; if absent, leave activity_type_id null
+    // and just write engagement_type as a label.
+    if (!allData['_activity_types_opps']) {
+      try {
+        allData['_activity_types_opps'] = await apiGet('activity_types', 'applies_to_opportunities=eq.true&select=*');
+      } catch { allData['_activity_types_opps'] = []; }
+    }
+    const promotionType = (allData['_activity_types_opps'] || []).find(t => t.name === 'Promotion');
+    await api('engagements', 'POST', {
+      deal_id:          dealId,
+      engagement_date:  new Date().toISOString().slice(0,10),
+      engagement_type:  promotionType ? promotionType.name : 'Promotion',
+      activity_type_id: promotionType ? +promotionType.id : null,
+      notes:            `Promoted from lead #${leadData.id}: ${leadData.description || ''}`.trim(),
+      next_action:      s.q4.nextActionText || null,
+      next_action_id:   s.q4.nextActionId || null,
+      action_details:   s.q4.actionDetails || null,
+      next_action_date: s.q4.nextActionDate || null,
+      next_action_done: false,
+      created_by:       currentUser?.personId || null,
+    }, '');
+
+    // === 9. Lead: link org/person/deal, set promoted_at ======
     await api('leads', 'PATCH', {
-      target_org_id:     +orgId,
-      target_org_name:   null,                     // FK wins; clear the free-text fallback
-      target_person_id:  +personId,
+      target_org_id:      +orgId,
+      target_org_name:    null,
+      target_person_id:   +personId,
       target_person_name: null,
-      promoted_at:       new Date().toISOString(),
-      updated_at:        new Date().toISOString(),
+      promoted_at:        new Date().toISOString(),
+      promoted_deal_id:   +dealId,
+      updated_at:         new Date().toISOString(),
     }, 'id=eq.' + leadData.id);
 
     closeModal();
     await reloadLeadAfterServerChange();
-    showStatus('Lead promoted — ' + (s.isNew ? 'new organisation created' : 'linked to existing organisation'));
+    showStatus('Lead promoted → deal #' + dealId + ' created');
   } catch (e) {
     showStatus('Could not promote: ' + e.message, 'error');
   }
@@ -5627,9 +6004,8 @@ async function saveLead() {
     }
     // Sync junction tables for the qualification multi-selects
     await saveLeadQualificationSelections(leadData.id);
+    // closeLeadPage refreshes the list itself now — no separate call needed.
     closeLeadPage();
-    // Refresh the list
-    if (currentPage === 'leads') await renderLeadsPage();
   } catch(e) {
     showStatus('Save failed: ' + e.message, 'error');
   }
