@@ -122,11 +122,30 @@ tr:hover td{background:#F8FAFC;}
 .status-bar.success{background:#ECFDF5;color:var(--green);border:1px solid #A7F3D0;display:block;}
 .status-bar.error{background:#FEF2F2;color:var(--red);border:1px solid #FECACA;display:block;}
 
-/* Brief input-acknowledgement spinner */
-.input-ack{position:fixed;bottom:68px;right:20px;width:34px;height:34px;border-radius:50%;pointer-events:none;opacity:0;transition:opacity 0.15s ease;z-index:99998;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.95);box-shadow:0 2px 8px rgba(0,0,0,0.12);}
+/* Xone-logo flipbook spinner — 4-frame horizontal sprite cycled in steps.
+   The sprite SVG is inlined as base64 so it ships with the single-file HTML
+   and never costs an extra Netlify asset request. */
+@keyframes xone-spin{to{background-position-x:-96px;}}
+.xone-sprite{background-size:0 0;background-image:url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTk2MCIgaGVpZ2h0PSI0NzgiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHhtbDpzcGFjZT0icHJlc2VydmUiIG92ZXJmbG93PSJoaWRkZW4iPjxkZWZzPjxjbGlwUGF0aCBpZD0iY2xpcDAiPjxyZWN0IHg9IjE5MDEiIHk9IjU4NSIgd2lkdGg9IjE5NjAiIGhlaWdodD0iNDc4Ii8+PC9jbGlwUGF0aD48L2RlZnM+PGcgY2xpcC1wYXRoPSJ1cmwoI2NsaXAwKSIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoLTE5MDEgLTU4NSkiPjxwYXRoIGQ9Ik0xOTk4LjQ4IDgyMC41MDIgMjA4OS41NSA4MjAuNTAyQzIxMDYuMzcgODIwLjUwMiAyMTIwLjAyIDgzNC4xNzMgMjEyMC4wMiA4NTEuMDM3TDIxMjAuMDIgOTQyLjMwNCAyMDIyLjUzIDEwNDAgMTkzMS4yNiAxMDQwIDE5MjkuOSAxMDM5Ljk3QzE5MTQuMzIgMTAzOS4xNyAxOTAxLjgyIDEwMjYuNjUgMTkwMS4wMyAxMDExLjA0TDE5MDEgMTAwOS42NiAxOTAxIDkxOC4xOThaTTIyMzMuNDcgNTg1IDIzMjQuNzUgNTg1IDIzMjYuMSA1ODUuMDM0QzIzNDEuNjggNTg1LjgyNiAyMzU0LjE4IDU5OC4zNDUgMjM1NC45NyA2MTMuOTU4TDIzNTUgNjE1LjM0MyAyMzU1IDcwNi44MDIgMjI1Ny41MiA4MDQuNDk4IDIxNjYuNDUgODA0LjQ5OEMyMTQ5LjYzIDgwNC40OTggMjEzNS45OCA3OTAuODI3IDIxMzUuOTggNzczLjk2M0wyMTM1Ljk4IDY4Mi42OTZaTTE5MzEuMjUgNTg1IDIwMjIuNTMgNTg1IDIxMjAuMDIgNjgyLjY5NiAyMTIwLjAyIDc3My45NjNDMjEyMC4wMiA3OTAuODI3IDIxMDYuMzcgODA0LjQ5OCAyMDg5LjU1IDgwNC40OThMMTk5OC40OCA4MDQuNDk4IDE5MDEgNzA2LjgwMiAxOTAxIDYxNS4zNDMgMTkwMS4wMyA2MTMuOTU4QzE5MDEuODIgNTk4LjM0NSAxOTE0LjMyIDU4NS44MjYgMTkyOS45IDU4NS4wMzRaIiBmaWxsPSIjRkEwQTExIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiLz48cGF0aCBkPSJNMjE2Ni40NyA4MjAgMjI1Ny41MyA4MjAgMjM1NSA5MTcuOTE5IDIzNTUgMTAwOS41OSAyMzU0Ljk3IDEwMTAuOThDMjM1NC4xOCAxMDI2LjYyIDIzNDEuNjggMTAzOS4xNyAyMzI2LjExIDEwMzkuOTdMMjMyNC43NSAxMDQwIDIyMzMuNDcgMTA0MCAyMTM2IDk0Mi4wODEgMjEzNiA4NTAuNjA1QzIxMzYgODMzLjcwMiAyMTQ5LjY0IDgyMCAyMTY2LjQ3IDgyMFoiIGZpbGw9IiNGRDlEQTAiIGZpbGwtcnVsZT0iZXZlbm9kZCIvPjxwYXRoIGQ9Ik0yNjIyLjAyIDY5MC40ODEgMjYyMi4wMiA3ODEuNTQ3QzI2MjIuMDIgNzk4LjM3NCAyNjA4LjM3IDgxMi4wMTUgMjU5MS41NSA4MTIuMDE1TDI1MDAuNDggODEyLjAxNSAyNDAzIDcxNC41MzQgMjQwMyA2MjMuMjU2IDI0MDMuMDMgNjIxLjg5NUMyNDAzLjgyIDYwNi4zMTYgMjQxNi4zMiA1OTMuODI1IDI0MzEuODkgNTkzLjAzNUwyNDMzLjI3IDU5MyAyNTI0LjUzIDU5M1pNMjg1NyA5MjUuNDY2IDI4NTcgMTAxNi43NSAyODU2Ljk3IDEwMTguMUMyODU2LjE4IDEwMzMuNjggMjg0My42OCAxMDQ2LjE4IDI4MjguMTEgMTA0Ni45NkwyODI2LjcyIDEwNDcgMjczNS40NyAxMDQ3IDI2MzcuOTggOTQ5LjUxOSAyNjM3Ljk4IDg1OC40NTNDMjYzNy45OCA4NDEuNjI1IDI2NTEuNjMgODI3Ljk4NCAyNjY4LjQ1IDgyNy45ODRMMjc1OS41MiA4MjcuOTg0Wk0yODU3IDYyMy4yNTQgMjg1NyA3MTQuNTM0IDI3NTkuNTIgODEyLjAxNSAyNjY4LjQ1IDgxMi4wMTVDMjY1MS42MyA4MTIuMDE1IDI2MzcuOTggNzk4LjM3NCAyNjM3Ljk4IDc4MS41NDdMMjYzNy45OCA2OTAuNDgxIDI3MzUuNDcgNTkzIDI4MjYuNzIgNTkzIDI4MjguMTEgNTkzLjAzNUMyODQzLjY4IDU5My44MjUgMjg1Ni4xOCA2MDYuMzE2IDI4NTYuOTcgNjIxLjg5NVoiIGZpbGw9IiNGQTBBMTEiIGZpbGwtcnVsZT0iZXZlbm9kZCIvPjxwYXRoIGQ9Ik0yNjIyIDg1OC40NjYgMjYyMiA5NDkuNTI2IDI1MjQuNTMgMTA0NyAyNDMzLjI3IDEwNDcgMjQzMS44OSAxMDQ2Ljk3QzI0MTYuMzIgMTA0Ni4xOCAyNDAzLjgyIDEwMzMuNjggMjQwMy4wMyAxMDE4LjExTDI0MDMgMTAxNi43NSAyNDAzIDkyNS40NzQgMjUwMC40NyA4MjggMjU5MS41MyA4MjhDMjYwOC4zNiA4MjggMjYyMiA4NDEuNjQgMjYyMiA4NTguNDY2WiIgZmlsbD0iI0ZEOURBMCIgZmlsbC1ydWxlPSJldmVub2RkIi8+PHBhdGggZD0iTTMyNjEuMyA4MjAuMDE1IDMxNzAuMDQgODIwLjAxNUMzMTUzLjE3IDgyMC4wMTUgMzEzOS41IDgwNi4zNzQgMzEzOS41IDc4OS41NDdMMzEzOS41IDY5OC40ODEgMzIzNy4yIDYwMSAzMzI4LjY4IDYwMSAzMzMwLjA0IDYwMS4wMzRDMzM0NS42NSA2MDEuODI0IDMzNTguMTcgNjE0LjMxNiAzMzU4Ljk3IDYyOS44OTRMMzM1OSA2MzEuMjc0IDMzNTkgNzIyLjUzNFpNMzAyNS44IDEwNTUgMjkzNC4zMiAxMDU1IDI5MzIuOTYgMTA1NC45N0MyOTE3LjM1IDEwNTQuMTggMjkwNC44MyAxMDQxLjY4IDI5MDQuMDQgMTAyNi4xMUwyOTA0IDEwMjQuNzIgMjkwNCA5MzMuNDY2IDMwMDEuNyA4MzUuOTg1IDMwOTIuOTYgODM1Ljk4NUMzMTA5LjgzIDgzNS45ODUgMzEyMy41IDg0OS42MjUgMzEyMy41IDg2Ni40NTNMMzEyMy41IDk1Ny41MTlaTTMzMjguNjggMTA1NSAzMjM3LjIgMTA1NSAzMTM5LjUgOTU3LjUxOSAzMTM5LjUgODY2LjQ1M0MzMTM5LjUgODQ5LjYyNSAzMTUzLjE3IDgzNS45ODUgMzE3MC4wNCA4MzUuOTg1TDMyNjEuMyA4MzUuOTg1IDMzNTkgOTMzLjQ2NiAzMzU5IDEwMjQuNzIgMzM1OC45NyAxMDI2LjExQzMzNTguMTcgMTA0MS42OCAzMzQ1LjY1IDEwNTQuMTggMzMzMC4wNCAxMDU0Ljk3WiIgZmlsbD0iI0ZBMEExMSIgZmlsbC1ydWxlPSJldmVub2RkIi8+PHBhdGggZD0iTTMwOTMuNCA4MjAgMzAwMS45MiA4MjAgMjkwNCA3MjIuNTI2IDI5MDQgNjMxLjI3MiAyOTA0LjA0IDYyOS44OTJDMjkwNC44MyA2MTQuMzE1IDI5MTcuMzggNjAxLjgyNCAyOTMzLjAzIDYwMS4wMzRMMjkzNC4zOSA2MDEgMzAyNi4wOCA2MDEgMzEyNCA2OTguNDc0IDMxMjQgNzg5LjUzNEMzMTI0IDgwNi4zNiAzMTEwLjMgODIwIDMwOTMuNCA4MjBaIiBmaWxsPSIjRkQ5REEwIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiLz48cGF0aCBkPSJNMzY0MS41IDk2NS41MTkgMzY0MS41IDg3NC40NTJDMzY0MS41IDg1Ny42MjYgMzY1NS4xNyA4NDMuOTg1IDM2NzIuMDQgODQzLjk4NUwzNzYzLjMgODQzLjk4NSAzODYxIDk0MS40NjYgMzg2MSAxMDMyLjc0IDM4NjAuOTcgMTAzNC4xQzM4NjAuMTcgMTA0OS42OCAzODQ3LjY1IDEwNjIuMTggMzgzMi4wNCAxMDYyLjk2TDM4MzAuNjYgMTA2MyAzNzM5LjIgMTA2M1pNMzQwNiA3MzAuNTM0IDM0MDYgNjM5LjI1NCAzNDA2LjAzIDYzNy44OTVDMzQwNi44MyA2MjIuMzE2IDM0MTkuMzQgNjA5LjgyNSAzNDM0Ljk2IDYwOS4wMzVMMzQzNi4zNCA2MDkgMzUyNy44IDYwOSAzNjI1LjUgNzA2LjQ4MSAzNjI1LjUgNzk3LjU0N0MzNjI1LjUgODE0LjM3NSAzNjExLjgzIDgyOC4wMTUgMzU5NC45NiA4MjguMDE1TDM1MDMuNyA4MjguMDE1Wk0zNDA2IDEwMzIuNzUgMzQwNiA5NDEuNDY2IDM1MDMuNyA4NDMuOTg1IDM1OTQuOTYgODQzLjk4NUMzNjExLjgzIDg0My45ODUgMzYyNS41IDg1Ny42MjYgMzYyNS41IDg3NC40NTJMMzYyNS41IDk2NS41MTkgMzUyNy44IDEwNjMgMzQzNi4zNCAxMDYzIDM0MzQuOTYgMTA2Mi45NkMzNDE5LjM0IDEwNjIuMTggMzQwNi44MyAxMDQ5LjY4IDM0MDYuMDMgMTAzNC4xWiIgZmlsbD0iI0ZBMEExMSIgZmlsbC1ydWxlPSJldmVub2RkIi8+PHBhdGggZD0iTTM2NDIgNzk3LjUzNCAzNjQyIDcwNi40NzQgMzczOS40NyA2MDkgMzgzMC43MyA2MDkgMzgzMi4xMSA2MDkuMDM1QzM4NDcuNjkgNjA5LjgyNSAzODYwLjE4IDYyMi4zMTUgMzg2MC45NyA2MzcuODkzTDM4NjEgNjM5LjI1NSAzODYxIDczMC41MjYgMzc2My41MyA4MjggMzY3Mi40NyA4MjhDMzY1NS42NCA4MjggMzY0MiA4MTQuMzYgMzY0MiA3OTcuNTM0WiIgZmlsbD0iI0ZEOURBMCIgZmlsbC1ydWxlPSJldmVub2RkIi8+PC9nPjwvc3ZnPg==");}
+
+/* Both spinner pseudo-elements reuse the .xone-sprite background via this
+   grouped selector — keeps the base64 URL declared in exactly one place. */
+.input-ack::after,
+.busy-overlay::before{content:'';display:block;width:24px;height:24px;background-image:inherit;background-size:96px 24px;background-repeat:no-repeat;background-position:0 0;animation:xone-spin 0.4s steps(4) infinite;}
+
+/* Brief input-acknowledgement spinner (selection changes) — stays bottom-right.
+   Inherits the sprite background from .xone-sprite via class composition on the
+   element (added in the HTML below). */
+.input-ack{position:fixed;bottom:68px;right:20px;width:36px;height:36px;border-radius:50%;pointer-events:none;opacity:0;transition:opacity 0.15s ease;z-index:99998;display:flex;align-items:center;justify-content:center;background-color:rgba(255,255,255,0.95);box-shadow:0 2px 8px rgba(0,0,0,0.12);}
 .input-ack.show{opacity:1;}
-.input-ack::after{content:'';width:18px;height:18px;border-radius:50%;border:2.5px solid #f3f4f6;border-top-color:var(--red);animation:spin 0.6s linear infinite;}
-@keyframes spin{to{transform:rotate(360deg);}}
+@keyframes spin{to{transform:rotate(360deg);}}  /* kept for any pre-existing usage */
+
+/* Sustained busy overlay — driven by startBusy(label) / stopBusy().
+   Position is dynamic via JS — appears near the last mouse position so the
+   feedback shows up where the user is looking, not in a fixed corner. */
+.busy-overlay{position:fixed;bottom:68px;right:20px;display:none;align-items:center;gap:10px;padding:8px 14px;background-color:rgba(255,255,255,0.98);border-radius:20px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:99999;pointer-events:none;}
+.busy-overlay.show{display:flex;}
+.busy-overlay-label{font-size:13px;font-weight:600;color:var(--text);}
 @keyframes slideIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
 
 /* ── Connection ────────────────────────────────────────── */
@@ -209,7 +228,7 @@ tr:hover td{background:#F8FAFC;}
     <div id="login-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;" onclick="doLogin()">Sign In</button>
     <div style="margin-top:16px;font-size:11px;color:var(--text3);">Password disabled — test mode</div>
-    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.35</div>
+    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.36</div>
   </div>
 </div>
 
@@ -228,7 +247,7 @@ tr:hover td{background:#F8FAFC;}
       <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;" id="sidebar-user-role"></div>
       <div id="conn-status" class="conn-badge offline"><div class="conn-dot"></div> Offline</div>
       <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.35</div>
+        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.36</div>
         <button class="btn btn-sm" onclick="doLogout()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);border:none;font-size:11px;">Sign out</button>
       </div>
     </div>
@@ -749,8 +768,15 @@ tr:hover td{background:#F8FAFC;}
 <!-- Status Bar -->
 <div id="status-bar" class="status-bar"></div>
 
-<!-- Brief input-acknowledgement spinner (flashes on every selection-style change) -->
-<div id="input-ack" class="input-ack" aria-hidden="true"></div>
+<!-- Brief input-acknowledgement spinner (flashes on every selection-style change).
+     `xone-sprite` provides the background-image that the ::after pseudo-element
+     inherits to render the 4-frame Xone-logo flipbook. -->
+<div id="input-ack" class="input-ack xone-sprite" aria-hidden="true"></div>
+
+<!-- Sustained busy overlay — driven by startBusy(label) / stopBusy() -->
+<div id="busy-overlay" class="busy-overlay xone-sprite" aria-live="polite">
+  <span class="busy-overlay-label" id="busy-label">Working…</span>
+</div>
 
 <script>
 'use strict';
@@ -836,6 +862,50 @@ document.addEventListener('change', (e) => {
     }
   }
 }, true);
+
+// ── Sustained busy overlay (for click→async actions) ──────
+// Use this for any operation that does network work and may take more than
+// ~150ms — saves, multi-step commits, anything where the user might wonder
+// "did it take?" Always pair with stopBusy() in a finally{} so it can't stick.
+//
+// Positioning: the overlay appears near the LAST known mouse position so the
+// feedback shows up where the user is looking. Falls back to bottom-right if
+// no mouse position has been observed (keyboard-triggered, first action, etc.)
+let _lastMouseX = null, _lastMouseY = null;
+document.addEventListener('mousemove', (e) => {
+  _lastMouseX = e.clientX;
+  _lastMouseY = e.clientY;
+}, { passive: true });
+
+function startBusy(label) {
+  const el  = document.getElementById('busy-overlay');
+  const lbl = document.getElementById('busy-label');
+  if (lbl) lbl.textContent = label || 'Working…';
+  if (!el) return;
+
+  // Reset any prior inline positioning then apply mouse-relative if available
+  el.style.left = el.style.top = el.style.right = el.style.bottom = '';
+  if (_lastMouseX != null && _lastMouseY != null) {
+    // Estimate overlay size for edge-clamping. Element isn't laid out yet
+    // (display:none until .show), so we approximate from typical content.
+    const approxW = 180, approxH = 40;
+    const offsetX = 16, offsetY = 16;   // sit just below-right of the cursor
+    let x = _lastMouseX + offsetX;
+    let y = _lastMouseY + offsetY;
+    if (x + approxW > window.innerWidth)  x = Math.max(8, window.innerWidth  - approxW - 8);
+    if (y + approxH > window.innerHeight) y = Math.max(8, window.innerHeight - approxH - 8);
+    el.style.left = x + 'px';
+    el.style.top  = y + 'px';
+  } else {
+    el.style.right  = '20px';
+    el.style.bottom = '68px';
+  }
+  el.classList.add('show');
+}
+function stopBusy() {
+  const el = document.getElementById('busy-overlay');
+  if (el) el.classList.remove('show');
+}
 
 // ── Status messages ──────────────────────────────────────
 let statusTimer;
@@ -5059,6 +5129,7 @@ async function promoteWizardSaveRedFlag() {
   const sel = document.getElementById('promote-red-flag-id');
   const flagId = sel ? +sel.value : 0;
   if (!flagId) { showStatus('Pick a red flag', 'error'); return; }
+  startBusy('Closing lead…');
   try {
     await api('lead_red_flags', 'POST', {
       lead_id:     leadData.id,
@@ -5078,6 +5149,8 @@ async function promoteWizardSaveRedFlag() {
     showStatus('Lead closed — red flag recorded');
   } catch (e) {
     showStatus('Could not save: ' + e.message, 'error');
+  } finally {
+    stopBusy();
   }
 }
 
@@ -5113,6 +5186,7 @@ async function promoteWizardProgress(canProgress) {
 async function promoteWizardSaveWake() {
   const wake = document.getElementById('promote-wake-date')?.value || '';
   if (!wake) { showStatus('Pick a wake date', 'error'); return; }
+  startBusy('Parking lead…');
   try {
     await api('leads', 'PATCH', {
       wake_date:  wake,
@@ -5123,6 +5197,8 @@ async function promoteWizardSaveWake() {
     showStatus('Lead parked — will resurface ' + wake);
   } catch (e) {
     showStatus('Could not save: ' + e.message, 'error');
+  } finally {
+    stopBusy();
   }
 }
 
@@ -5758,31 +5834,50 @@ function _onPromoteQ4ServiceSubChange() {
   document.getElementById('promote-q4-recurring').style.display    = s.q4.isRecurring ? 'block' : 'none';
   document.getElementById('promote-q4-nonrecurring').style.display = s.q4.isRecurring ? 'none' : 'block';
 
-  // Re-render duration default into the visible field
+  // Auto-populate the value and duration fields from the lead's est_value
+  // (treated as the annual value). Only fills empty fields — never overwrites
+  // user input. User can still freely change any of these before Promote lands.
+  const annual = +leadData.est_value || 0;
   if (s.q4.isRecurring) {
-    const f = document.getElementById('promote-q4-duration-rec');
-    if (f && !f.value) f.value = s.q4.durationMonths;
+    const monthlyF  = document.getElementById('promote-q4-monthly');
+    const durationF = document.getElementById('promote-q4-duration-rec');
+    if (monthlyF && !monthlyF.value && annual) {
+      monthlyF.value = Math.round(annual / 12);
+    }
+    if (durationF && !durationF.value) durationF.value = s.q4.durationMonths;
   } else {
-    const f = document.getElementById('promote-q4-duration-proj');
-    if (f && !f.value) f.value = s.q4.durationMonths;
+    const totalF    = document.getElementById('promote-q4-total');
+    const durationF = document.getElementById('promote-q4-duration-proj');
+    if (totalF && !totalF.value && annual) {
+      totalF.value = annual;
+    }
+    if (durationF && !durationF.value) durationF.value = s.q4.durationMonths;
   }
 }
 // Full promotion commit: org/person/affiliation/deal/collaborator/contact/stream/months/engagement/lead.
 // Called from Q4 screen 2 — reads & validates the revenue-stream fields, then does the chain.
 async function savePromoteAll() {
+  // Debounce: a double-click would otherwise fire the entire commit chain
+  // twice, creating duplicate deals + streams. Disable the button on entry
+  // and only re-enable on validation failure (success closes the modal anyway).
+  const promoteBtn = document.querySelector('#modal-root .btn-primary');
+  if (promoteBtn?.disabled) return;
+  if (promoteBtn) { promoteBtn.disabled = true; promoteBtn.textContent = 'Promoting…'; }
+  const _reenable = () => { if (promoteBtn) { promoteBtn.disabled = false; promoteBtn.textContent = 'Promote lead →'; } };
+
   const s = window._promoteOrgState;
-  if (!s?.q4) { showStatus('Wizard state lost — start again', 'error'); return; }
+  if (!s?.q4) { showStatus('Wizard state lost — start again', 'error'); _reenable(); return; }
 
   // — Capture & validate Q4 screen 2 (revenue stream) —
   const subId    = +(document.getElementById('promote-q4-service-sub')?.value || 0);
   const orderDt  = (document.getElementById('promote-q4-order-date')?.value || '').trim();
   const startDt  = (document.getElementById('promote-q4-start-date')?.value || '').trim();
-  if (!subId)   { showStatus('Pick a service type', 'error'); return; }
-  if (!orderDt) { showStatus('Expected order date is required', 'error'); return; }
-  if (!startDt) { showStatus('Service start date is required', 'error'); return; }
+  if (!subId)   { showStatus('Pick a service type', 'error'); _reenable(); return; }
+  if (!orderDt) { showStatus('Expected order date is required', 'error'); _reenable(); return; }
+  if (!startDt) { showStatus('Service start date is required', 'error'); _reenable(); return; }
 
   const subRow = (allData['service_sub_all'] || []).find(x => +x.id === subId);
-  if (!subRow) { showStatus('Service type not found — refresh and try again', 'error'); return; }
+  if (!subRow) { showStatus('Service type not found — refresh and try again', 'error'); _reenable(); return; }
   const isRec  = !!subRow.is_recurring;
   const margin = +subRow.default_margin || 25;
 
@@ -5790,15 +5885,15 @@ async function savePromoteAll() {
   if (isRec) {
     const monthly  = +(document.getElementById('promote-q4-monthly')?.value || 0);
     const duration = +(document.getElementById('promote-q4-duration-rec')?.value || 0);
-    if (!monthly || monthly <= 0)    { showStatus('Monthly value is required',  'error'); return; }
-    if (!duration || duration <= 0)  { showStatus('Duration is required',       'error'); return; }
+    if (!monthly || monthly <= 0)    { showStatus('Monthly value is required',  'error'); _reenable(); return; }
+    if (!duration || duration <= 0)  { showStatus('Duration is required',       'error'); _reenable(); return; }
     durationMonths = duration;
     monthValues = Array(duration).fill(monthly);
   } else {
     const total    = +(document.getElementById('promote-q4-total')?.value || 0);
     const duration = +(document.getElementById('promote-q4-duration-proj')?.value || 0);
-    if (!total || total <= 0)        { showStatus('Total project value is required', 'error'); return; }
-    if (!duration || duration <= 0)  { showStatus('Delivery window is required',     'error'); return; }
+    if (!total || total <= 0)        { showStatus('Total project value is required', 'error'); _reenable(); return; }
+    if (!duration || duration <= 0)  { showStatus('Delivery window is required',     'error'); _reenable(); return; }
     durationMonths = duration;
     // Split evenly, with the remainder added to the final month so the sum matches exactly.
     const base = Math.floor((total / duration) * 100) / 100;
@@ -5813,6 +5908,7 @@ async function savePromoteAll() {
   s.q4.startDate      = startDt;
   s.q4.durationMonths = durationMonths;
 
+  startBusy('Promoting lead…');
   try {
     // === 1. Org: create or update ============================
     let orgId = s.selectedOrgId;
@@ -5863,7 +5959,7 @@ async function savePromoteAll() {
     const firstStage = openCat
       ? (allData['stages'] || []).filter(st => +st.category_id === +openCat.id).sort((a,b) => a.sort_order - b.sort_order)[0]
       : null;
-    if (!firstStage) { showStatus('No Opportunity-Open stage found — set one in Lookups', 'error'); return; }
+    if (!firstStage) { showStatus('No Opportunity-Open stage found — set one in Lookups', 'error'); _reenable(); return; }
 
     const dealPayload = {
       name:             s.q4.dealName,
@@ -5908,7 +6004,10 @@ async function savePromoteAll() {
     const startDate = new Date(startDt);
     for (let i = 0; i < monthValues.length; i++) {
       const m = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1);
-      const monthStr = m.toISOString().slice(0,7) + '-01';
+      // Month key matches the existing opportunity form's format: YYYY-MM with
+      // no day. The grid lookup uses this same shape — sending YYYY-MM-01 would
+      // store under a different key and the grid would show blank.
+      const monthStr = m.toISOString().slice(0,7);
       const revenue  = +monthValues[i];
       const marginR  = Math.round((revenue * margin / 100) * 100) / 100;
       await api('revenue_stream_months', 'POST', {
@@ -5956,6 +6055,9 @@ async function savePromoteAll() {
     showStatus('Lead promoted → deal #' + dealId + ' created');
   } catch (e) {
     showStatus('Could not promote: ' + e.message, 'error');
+    _reenable();
+  } finally {
+    stopBusy();
   }
 }
 
@@ -6023,6 +6125,7 @@ async function saveDecline() {
     showStatus("You don't have permission to set that reason", 'error');
     return;
   }
+  startBusy('Closing lead…');
   try {
     await api('leads', 'PATCH', {
       dead_reason: reason,
@@ -6034,6 +6137,8 @@ async function saveDecline() {
     showStatus('Lead closed');
   } catch (e) {
     showStatus('Could not save: ' + e.message, 'error');
+  } finally {
+    stopBusy();
   }
 }
 
@@ -6183,6 +6288,7 @@ async function saveLead() {
     updated_at: new Date().toISOString(),
   };
 
+  startBusy('Saving lead…');
   try {
     if (leadData.id) {
       const result = await api('leads', 'PATCH', payload, 'id=eq.' + leadData.id + '&select=*');
@@ -6200,6 +6306,8 @@ async function saveLead() {
     closeLeadPage();
   } catch(e) {
     showStatus('Save failed: ' + e.message, 'error');
+  } finally {
+    stopBusy();
   }
 }
 
@@ -6457,6 +6565,7 @@ async function saveLeadInteraction(editId) {
     : null;
   const completionNote = nextDone ? (completionNoteInput || null) : null;
 
+  startBusy(editId ? 'Updating interaction…' : 'Logging interaction…');
   try {
     const payload = {
       engagement_date: date,
@@ -6491,6 +6600,8 @@ async function saveLeadInteraction(editId) {
     await reloadLeadAfterServerChange();
   } catch(e) {
     showStatus('Failed: ' + e.message, 'error');
+  } finally {
+    stopBusy();
   }
 }
 
