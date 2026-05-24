@@ -248,7 +248,7 @@ tr:hover td{background:#F8FAFC;}
     <div id="login-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;" onclick="doLogin()">Sign In</button>
     <div style="margin-top:16px;font-size:11px;color:var(--text3);">Password disabled — test mode</div>
-    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.37</div>
+    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.38</div>
   </div>
 </div>
 
@@ -267,7 +267,7 @@ tr:hover td{background:#F8FAFC;}
       <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;" id="sidebar-user-role"></div>
       <div id="conn-status" class="conn-badge offline"><div class="conn-dot"></div> Offline</div>
       <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.37</div>
+        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.38</div>
         <button class="btn btn-sm" onclick="doLogout()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);border:none;font-size:11px;">Sign out</button>
       </div>
     </div>
@@ -1626,10 +1626,9 @@ async function loadTable(page) {
   const body = document.getElementById('table-body');
   const head = document.getElementById('table-head');
 
-  // Render header
-  const cols = [...cfg.columns, { key: '_actions', label: 'Actions' }];
-  head.innerHTML = '<tr>' + cols.map(c => `<th>${c.label}</th>`).join('') + '</tr>';
-  body.innerHTML = '<tr class="empty-row"><td colspan="' + cols.length + '">Loading...</td></tr>';
+  head.innerHTML = '';
+  const totalColCount = cfg.columns.length + 1; // +1 for the actions column
+  body.innerHTML = '<tr class="empty-row"><td colspan="' + totalColCount + '">Loading...</td></tr>';
 
   try {
     // Preload any lookup tables needed
@@ -1654,17 +1653,36 @@ async function loadTable(page) {
 
     currentData = await apiGet(cfg.table, 'select=*&order=id.asc');
     allData[cfg.table] = currentData;
-    // Cache roles and permissions for role_permissions matrix
     if (cfg.table === 'roles' || cfg.table === 'permissions') allData[cfg.table] = currentData;
 
     document.getElementById('page-sub').textContent = currentData.length + ' record' + (currentData.length !== 1 ? 's' : '');
 
     if (!currentData.length) {
-      body.innerHTML = '<tr class="empty-row"><td colspan="' + cols.length + '">No records yet — click "+ Add" to create one</td></tr>';
+      head.innerHTML = '<tr>' + cfg.columns.map(c => `<th>${c.label}</th>`).join('') + '<th>Actions</th></tr>';
+      body.innerHTML = '<tr class="empty-row"><td colspan="' + totalColCount + '">No records yet — click "+ Add" to create one</td></tr>';
       return;
     }
 
-    body.innerHTML = currentData.map(row => {
+    // Convert PAGES.columns config → sort/filter helper columns. The helper's
+    // get(row) returns the same value the user sees in the cell — so the filter
+    // checkbox list shows resolved lookup labels, not raw IDs.
+    const helperCols = cfg.columns.map(col => ({
+      key: col.key,
+      label: col.label,
+      get: (row) => {
+        let val = row[col.key];
+        if (col.lookup) {
+          const lookup = allData[col.lookup] || [];
+          const found = lookup.find(r => +r.id === +val);
+          return found ? col.lookupLabel(found) : (val || '');
+        }
+        // For render-only columns we can't usefully sort/filter; fall back to raw
+        return val == null ? '' : val;
+      },
+    }));
+    helperCols.push({ key: '_actions', label: 'Actions', get: () => '', sortable: false, filterable: false });
+
+    const rowRenderer = (row) => {
       const cells = cfg.columns.map(col => {
         let val = row[col.key];
         if (col.render) return `<td>${col.render(val)}</td>`;
@@ -1680,10 +1698,20 @@ async function loadTable(page) {
         <button class="btn btn-danger btn-sm" onclick="confirmDelete(${row.id})">Delete</button>
       </td>`;
       return `<tr>${cells}${actions}</tr>`;
-    }).join('');
+    };
+
+    makeSortableFilterableTable({
+      tableId: 'page-' + page,
+      headRoot: head,
+      bodyRoot: body,
+      columns: helperCols,
+      rows: currentData,
+      rowRenderer,
+      emptyMessage: 'No records match the current filters',
+    });
 
   } catch(e) {
-    body.innerHTML = `<tr class="empty-row"><td colspan="${cols.length}">Error loading data: ${e.message}</td></tr>`;
+    body.innerHTML = `<tr class="empty-row"><td colspan="${totalColCount}">Error loading data: ${e.message}</td></tr>`;
     showStatus('Failed to load data', 'error');
   }
 }
@@ -4459,32 +4487,57 @@ async function renderLeadsPage() {
       filtered.length + ' lead' + (filtered.length !== 1 ? 's' : '') + ' in this view · ' +
       leads.length + ' total';
 
-    // Render table
+    // Render table — uses the shared sort/filter helper. Tab counts above
+    // are based on the unfiltered status counts; sort/filter operates only on
+    // the rows already narrowed to the active tab.
     const wrap = document.getElementById('leads-table-wrap');
-    if (!filtered.length) {
-      const emptyMsg = leads.length === 0
-        ? 'No leads yet. Click "+ New Lead" to create one. (Lead capture form lands in Increment 2.)'
-        : 'No leads match this view. Try another tab.';
-      wrap.innerHTML = `<div style="padding:40px 20px;text-align:center;color:var(--text3);background:var(--bg);border-radius:8px;">${emptyMsg}</div>`;
+    if (!leads.length) {
+      wrap.innerHTML = `<div style="padding:40px 20px;text-align:center;color:var(--text3);background:var(--bg);border-radius:8px;">No leads yet. Click "+ New Lead" to create one.</div>`;
       return;
     }
 
     wrap.innerHTML = `<table style="width:100%;border-collapse:collapse;">
-      <thead>
-        <tr style="background:var(--bg);">
-          <th style="text-align:left;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);">Source</th>
-          <th style="text-align:left;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);">Target</th>
-          <th style="text-align:left;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);">Region</th>
-          <th style="text-align:center;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);" title="Fit / Trigger / Access / Capacity">Qual</th>
-          <th style="text-align:left;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);">Owner</th>
-          <th style="text-align:left;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);">Next Action</th>
-          <th style="text-align:left;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);">Last Touch</th>
-        </tr>
-      </thead>
-      <tbody>
-      ${filtered.map(l => renderLeadRow(l, sources, regions, people, orgs)).join('')}
-      </tbody>
+      <thead id="leads-thead" style="background:var(--bg);"></thead>
+      <tbody id="leads-tbody"></tbody>
     </table>`;
+
+    const leadsHead = document.getElementById('leads-thead');
+    const leadsBody = document.getElementById('leads-tbody');
+
+    // Columns: get() returns the display value (resolved lookup labels), so the
+    // filter checkbox list shows human-readable names, not raw IDs.
+    const ownerName = (l) => {
+      const p = people.find(x => +x.id === +l.owner_id);
+      return p ? [p.first_name, p.last_name].filter(Boolean).join(' ') : 'Shared';
+    };
+    const targetName = (l) => {
+      const o = l.target_org_id ? orgs.find(x => +x.id === +l.target_org_id) : null;
+      return o?.name || l.target_org_name || '';
+    };
+    const lastTouchDays = (l) => {
+      if (!l.last_touch_date) return null;
+      return Math.floor((Date.now() - new Date(l.last_touch_date).getTime()) / 86400000);
+    };
+
+    const cols = [
+      { key: 'source', label: 'Source',      get: l => (sources.find(s => +s.id === +l.source_id)?.name) || '' },
+      { key: 'target', label: 'Target',      get: l => targetName(l) },
+      { key: 'region', label: 'Region',      get: l => (regions.find(r => +r.id === +l.region_id)?.name) || '' },
+      { key: 'qual',   label: 'Qual',        get: l => (+l.fit||0)+(+l.trigger_score||0)+(+l.access||0)+(+l.capacity||0), align: 'center' },
+      { key: 'owner',  label: 'Owner',       get: l => ownerName(l) },
+      { key: 'nxt',    label: 'Next Action', get: l => l.next_action || '' },
+      { key: 'touch',  label: 'Last Touch',  get: l => lastTouchDays(l) },
+    ];
+
+    makeSortableFilterableTable({
+      tableId: 'leads-' + leadsViewTab,   // per-tab state so each tab has its own filter
+      headRoot: leadsHead,
+      bodyRoot: leadsBody,
+      columns: cols,
+      rows: filtered,
+      rowRenderer: (l) => renderLeadRow(l, sources, regions, people, orgs),
+      emptyMessage: 'No leads in this tab match the current filters.',
+    });
   } catch(e) {
     document.getElementById('leads-table-wrap').innerHTML =
       `<div style="padding:20px;color:var(--red);">Error loading leads: ${e.message}</div>`;
@@ -4569,7 +4622,7 @@ async function renderResearchCampaignsPage() {
   const head = document.getElementById('table-head');
   const body = document.getElementById('table-body');
 
-  head.innerHTML = '<tr><th>Name</th><th>Segment</th><th>Region</th><th>Service Focus</th><th>Status</th><th>Owner</th><th>Created</th></tr>';
+  head.innerHTML = '';
   body.innerHTML = '<tr class="empty-row"><td colspan="7">Loading…</td></tr>';
 
   try {
@@ -4588,33 +4641,58 @@ async function renderResearchCampaignsPage() {
       campaigns.length + ' campaign' + (campaigns.length !== 1 ? 's' : '');
 
     if (!campaigns.length) {
+      head.innerHTML = '<tr><th>Name</th><th>Segment</th><th>Region</th><th>Service Focus</th><th>Status</th><th>Owner</th><th>Created</th></tr>';
       body.innerHTML = '<tr class="empty-row"><td colspan="7">No research campaigns yet. Click "+ New Campaign" to create one. (Form lands in Increment 2.)</td></tr>';
       return;
     }
 
-    body.innerHTML = campaigns.map(c => {
+    const ownerName = (c) => {
+      const p = people.find(x => +x.id === +c.owner_id);
+      return p ? [p.first_name, p.last_name].filter(Boolean).join(' ') : '';
+    };
+    const STATUS_STYLE = {
+      'Active':    'background:#dcfce7;color:#166534;',
+      'Paused':    'background:#fef3c7;color:#92400e;',
+      'Completed': 'background:#e0e7ff;color:#3730a3;',
+      'Abandoned': 'background:#fee2e2;color:#991b1b;',
+    };
+
+    const cols = [
+      { key: 'name',    label: 'Name',          get: c => c.name || '' },
+      { key: 'segment', label: 'Segment',       get: c => c.segment || '' },
+      { key: 'region',  label: 'Region',        get: c => (regions.find(r => +r.id === +c.region_id)?.name) || '' },
+      { key: 'service', label: 'Service Focus', get: c => (services.find(s => +s.id === +c.service_major_id)?.name) || '' },
+      { key: 'status',  label: 'Status',        get: c => c.status || '' },
+      { key: 'owner',   label: 'Owner',         get: c => ownerName(c) },
+      { key: 'created', label: 'Created',       get: c => c.created_at || '' },
+    ];
+
+    const rowRenderer = (c) => {
       const region  = regions.find(r => +r.id === +c.region_id);
       const service = services.find(s => +s.id === +c.service_major_id);
       const owner   = people.find(p => +p.id === +c.owner_id);
-      const ownerName = owner ? [owner.first_name, owner.last_name].filter(Boolean).join(' ') : '—';
-
-      const statusColour = {
-        'Active':    'background:#dcfce7;color:#166534;',
-        'Paused':    'background:#fef3c7;color:#92400e;',
-        'Completed': 'background:#e0e7ff;color:#3730a3;',
-        'Abandoned': 'background:#fee2e2;color:#991b1b;',
-      }[c.status] || 'background:#f3f4f6;color:#4b5563;';
-
+      const ownerLabel = owner ? [owner.first_name, owner.last_name].filter(Boolean).join(' ') : '—';
+      const statusColour = STATUS_STYLE[c.status] || 'background:#f3f4f6;color:#4b5563;';
       return `<tr onclick="openResearchCampaign(${c.id})" style="cursor:pointer;">
         <td style="font-weight:600;">${c.name}</td>
         <td>${c.segment || '—'}</td>
         <td>${region?.name || '—'}</td>
         <td>${service?.name || '—'}</td>
         <td><span style="${statusColour}padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;">${c.status}</span></td>
-        <td>${ownerName}</td>
+        <td>${ownerLabel}</td>
         <td>${c.created_at ? new Date(c.created_at).toLocaleDateString('en-ZA') : '—'}</td>
       </tr>`;
-    }).join('');
+    };
+
+    makeSortableFilterableTable({
+      tableId: 'research_campaigns',
+      headRoot: head,
+      bodyRoot: body,
+      columns: cols,
+      rows: campaigns,
+      rowRenderer,
+      emptyMessage: 'No campaigns match the current filters',
+    });
   } catch(e) {
     body.innerHTML = `<tr class="empty-row"><td colspan="7">Error: ${e.message}</td></tr>`;
   }
@@ -7273,7 +7351,7 @@ async function renderAllOppContacts() {
   const head = document.getElementById('table-head');
   const body = document.getElementById('table-body');
   document.getElementById('add-btn').style.display = 'none';
-  head.innerHTML = '<tr><th>Person</th><th>Organisation</th><th>Opportunity</th><th>DMU Role</th><th>Note</th></tr>';
+  head.innerHTML = '';
   body.innerHTML = '<tr class="empty-row"><td colspan="5">Loading...</td></tr>';
   try {
     const [contacts, people, orgs, deals, dmuRoles] = await Promise.all([
@@ -7288,10 +7366,31 @@ async function renderAllOppContacts() {
     allData['dmu_roles'] = dmuRoles;
     document.getElementById('page-sub').textContent = contacts.length + ' contact' + (contacts.length !== 1 ? 's' : '');
     if (!contacts.length) {
+      head.innerHTML = '<tr><th>Person</th><th>Organisation</th><th>Opportunity</th><th>DMU Role</th><th>Note</th></tr>';
       body.innerHTML = '<tr class="empty-row"><td colspan="5">No opportunity contacts yet</td></tr>';
       return;
     }
-    body.innerHTML = contacts.map(c => {
+
+    const personName = (c) => {
+      const p = people.find(x => +x.id === +c.person_id);
+      return p ? [p.first_name, p.last_name].filter(Boolean).join(' ') : '';
+    };
+    const dealName = (c) => deals.find(x => +x.id === +c.deal_id)?.name || '';
+    const orgName  = (c) => {
+      const d = deals.find(x => +x.id === +c.deal_id);
+      return d ? (orgs.find(x => +x.id === +d.org_id)?.name || '') : '';
+    };
+    const dmuName  = (c) => dmuRoles.find(x => +x.id === +c.dmu_role_id)?.name || '';
+
+    const cols = [
+      { key: 'person', label: 'Person',       get: personName },
+      { key: 'org',    label: 'Organisation', get: orgName },
+      { key: 'deal',   label: 'Opportunity',  get: dealName },
+      { key: 'dmu',    label: 'DMU Role',     get: dmuName },
+      { key: 'note',   label: 'Note',         get: c => c.note || '' },
+    ];
+
+    const rowRenderer = (c) => {
       const p = people.find(x => +x.id === +c.person_id);
       const d = deals.find(x => +x.id === +c.deal_id);
       const o = orgs.find(x => d && +x.id === +d.org_id);
@@ -7303,7 +7402,17 @@ async function renderAllOppContacts() {
         <td>${dmu ? '<span class="badge badge-blue">'+dmu.name+'</span>' : '—'}</td>
         <td style="font-size:12px;color:var(--text2);">${c.note || ''}</td>
       </tr>`;
-    }).join('');
+    };
+
+    makeSortableFilterableTable({
+      tableId: 'opportunity_contacts',
+      headRoot: head,
+      bodyRoot: body,
+      columns: cols,
+      rows: contacts,
+      rowRenderer,
+      emptyMessage: 'No contacts match the current filters',
+    });
   } catch(e) {
     body.innerHTML = `<tr class="empty-row"><td colspan="5">Error: ${e.message}</td></tr>`;
   }
