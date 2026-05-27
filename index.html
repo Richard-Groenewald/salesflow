@@ -248,7 +248,7 @@ tr:hover td{background:#F8FAFC;}
     <div id="login-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;" onclick="doLogin()">Sign In</button>
     <div style="margin-top:16px;font-size:11px;color:var(--text3);">Password disabled — test mode</div>
-    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.38</div>
+    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.39</div>
   </div>
 </div>
 
@@ -267,7 +267,7 @@ tr:hover td{background:#F8FAFC;}
       <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;" id="sidebar-user-role"></div>
       <div id="conn-status" class="conn-badge offline"><div class="conn-dot"></div> Offline</div>
       <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.38</div>
+        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.39</div>
         <button class="btn btn-sm" onclick="doLogout()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);border:none;font-size:11px;">Sign out</button>
       </div>
     </div>
@@ -610,12 +610,12 @@ tr:hover td{background:#F8FAFC;}
             <label class="form-label">Target organisation</label>
             <div style="display:flex;gap:8px;">
               <select id="lead-target-org-id" class="form-control" style="flex:1;" onchange="onLeadTargetOrgChange()">
-                <option value="">— pick existing or enter name below —</option>
+                <option value="">Pick from known organisations in our database or create a new one below</option>
               </select>
             </div>
-            <input type="text" id="lead-target-org-name" class="form-control" placeholder="Or type org name (use this if not yet a known client)" style="margin-top:8px;" oninput="onLeadTargetOrgNameInput()">
+            <input type="text" id="lead-target-org-name" class="form-control" placeholder="New organisation name" style="margin-top:8px;" oninput="onLeadTargetOrgNameInput()">
             <div id="lead-target-org-matches" style="margin-top:8px;"></div>
-            <div style="font-size:11px;color:var(--text3);margin-top:4px;">Pick an existing organisation, OR type a name in the second field for new prospects. We'll warn you if the typed name looks like an existing client.</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:4px;">We'll warn you if it seems a similar organisation exists in our database.</div>
           </div>
 
           <div class="form-group">
@@ -623,8 +623,9 @@ tr:hover td{background:#F8FAFC;}
             <select id="lead-target-person-id" class="form-control" onchange="onLeadTargetPersonChange()" style="display:none;">
               <option value="">— pick existing affiliated contact —</option>
             </select>
-            <input type="text" id="lead-target-person-name" class="form-control" placeholder="Or type contact name" style="margin-top:8px;">
-            <div id="lead-target-person-hint" style="font-size:11px;color:var(--text3);margin-top:4px;">Pick an existing target organisation above to see its affiliated contacts.</div>
+            <input type="text" id="lead-target-person-name" class="form-control" placeholder="New contact name" style="margin-top:8px;" oninput="onLeadTargetPersonNameInput()">
+            <div id="lead-target-person-matches" style="margin-top:8px;"></div>
+            <div id="lead-target-person-hint" style="font-size:11px;color:var(--text3);margin-top:4px;">Pick an existing organisation-affiliated person or create a new one below.</div>
           </div>
         </div>
 
@@ -4975,9 +4976,11 @@ function resetLeadForm() {
     'lead-dead-reason-value','lead-dead-notes-value'
   ];
   ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-  // Clear the target-org similarity match hints
-  const matchEl = document.getElementById('lead-target-org-matches');
-  if (matchEl) matchEl.innerHTML = '';
+  // Clear similarity match hints
+  const orgMatchEl = document.getElementById('lead-target-org-matches');
+  if (orgMatchEl) orgMatchEl.innerHTML = '';
+  const personMatchEl = document.getElementById('lead-target-person-matches');
+  if (personMatchEl) personMatchEl.innerHTML = '';
   // Reset the target-person dropdown to its hidden, no-org-picked state
   refreshLeadTargetPersonDropdown();
   // Status badge resets to New
@@ -5097,7 +5100,11 @@ function populateLeadForm() {
       if (sel) sel.value = leadData.target_person_id;
     }
   });
-  if (leadData.target_person_name) document.getElementById('lead-target-person-name').value = leadData.target_person_name;
+  if (leadData.target_person_name) {
+    document.getElementById('lead-target-person-name').value = leadData.target_person_name;
+    // Surface similarity hints if the lead was saved with a free-text contact name
+    onLeadTargetPersonNameInput();
+  }
   // Details
   if (leadData.description) document.getElementById('lead-description').value = leadData.description;
   if (leadData.region_id) document.getElementById('lead-region-id').value = leadData.region_id;
@@ -5236,11 +5243,13 @@ async function refreshLeadTargetPersonDropdown() {
 }
 
 function onLeadTargetPersonChange() {
-  // Same logic as org: FK wins, clear the free-text fallback
+  // Same logic as org: FK wins, clear the free-text fallback + any similarity hints
   const personId = document.getElementById('lead-target-person-id').value;
   if (personId) {
     const nameField = document.getElementById('lead-target-person-name');
     if (nameField) nameField.value = '';
+    const matchEl = document.getElementById('lead-target-person-matches');
+    if (matchEl) matchEl.innerHTML = '';
   }
 }
 
@@ -5295,6 +5304,125 @@ function useLeadTargetOrgMatch(orgId) {
   }
   dd.value = orgId;
   onLeadTargetOrgChange();  // clears free-text + match strip
+}
+
+// ── Person similarity check on the lead's contact-person free-text field ──
+// Lazy-loads person_organisation_roles the first time matches are found so
+// the lead form's initial open stays fast (one fewer parallel API call).
+
+async function _ensurePersonAffiliationsLoaded() {
+  if (allData['person_organisation_roles']) return;
+  try {
+    allData['person_organisation_roles'] =
+      await apiGet('person_organisation_roles', 'select=person_id,org_id,role_type,is_primary');
+  } catch (e) {
+    allData['person_organisation_roles'] = [];
+    console.warn('Could not load affiliations:', e.message);
+  }
+}
+
+function _personAffiliationsLabel(personId) {
+  const links = (allData['person_organisation_roles'] || []).filter(l => +l.person_id === +personId);
+  if (!links.length) return 'no current affiliations';
+  const orgs = allData['organisations'] || [];
+  const names = links
+    .map(l => orgs.find(o => +o.id === +l.org_id)?.name)
+    .filter(Boolean);
+  if (!names.length) return 'no current affiliations';
+  return 'affiliated with ' + names.join(', ');
+}
+
+function _personMatchScore(person, query) {
+  const q = (query || '').trim().toLowerCase();
+  if (!q) return 0;
+  const full = [person.first_name, person.last_name].filter(Boolean).join(' ').toLowerCase();
+  if (!full) return 0;
+  if (full === q) return 100;
+  // Token-overlap fallback — count distinct query tokens (≥3 chars) appearing in the name
+  const qTokens = Array.from(new Set(q.split(/\s+/).filter(t => t.length >= 3)));
+  if (!qTokens.length) {
+    // For short queries (e.g. single-letter initial) fall back to substring match
+    return full.includes(q) ? 5 : 0;
+  }
+  const nameTokens = full.split(/\s+/).filter(Boolean);
+  let hits = 0;
+  for (const t of qTokens) {
+    if (nameTokens.some(n => n.includes(t) || t.includes(n))) hits++;
+  }
+  return hits;
+}
+
+function _findPersonMatches(query) {
+  const people = allData['people'] || [];
+  const scored = people
+    .map(p => ({ person: p, score: _personMatchScore(p, query) }))
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score);
+  const exact = scored.find(x => x.score === 100) || null;
+  const shortlist = scored.filter(x => x.score < 100).slice(0, 5).map(x => x.person);
+  return { exact: exact ? exact.person : null, shortlist };
+}
+
+async function onLeadTargetPersonNameInput() {
+  const matchEl = document.getElementById('lead-target-person-matches');
+  if (!matchEl) return;
+  const name = (document.getElementById('lead-target-person-name')?.value || '').trim();
+  // If an affiliated contact is already picked from the dropdown, free-text is irrelevant.
+  if (document.getElementById('lead-target-person-id')?.value) { matchEl.innerHTML = ''; return; }
+  if (name.length < 3) { matchEl.innerHTML = ''; return; }
+
+  // Lazy-load affiliations the first time we need them
+  await _ensurePersonAffiliationsLoaded();
+
+  const { exact, shortlist } = _findPersonMatches(name);
+  const render = (p, isExact) => {
+    const fullName = [p.first_name, p.last_name].filter(Boolean).join(' ');
+    const affil = _personAffiliationsLabel(p.id);
+    const meta = [p.title, affil].filter(Boolean).join(' · ');
+    const colour = isExact ? '2px solid #16a34a;background:#F0FDF4;' : '1px solid var(--border);background:white;';
+    return `
+      <div style="padding:8px 10px;border:${colour};border-radius:var(--radius);display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px;">
+        <div style="font-size:13px;">
+          ${isExact ? '<span style="font-size:10px;font-weight:700;text-transform:uppercase;color:#166534;">Exact name match · </span>' : ''}
+          <strong>${fullName}</strong>
+          ${meta ? ` <span style="color:var(--text3);font-size:11px;display:block;margin-top:2px;">${meta} — same person?</span>` : ''}
+        </div>
+        <button type="button" class="btn ${isExact ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="useLeadTargetPersonMatch(${p.id})">Use this</button>
+      </div>`;
+  };
+
+  let html = '';
+  if (exact) html += render(exact, true);
+  if (shortlist.length) {
+    html += `<div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);margin:4px 0 4px;">Possible matches</div>`;
+    html += shortlist.slice(0, 3).map(p => render(p, false)).join('');
+  }
+  matchEl.innerHTML = html;
+}
+
+// Picking a suggested match: drop them into the dropdown FK, clear free text + matches.
+function useLeadTargetPersonMatch(personId) {
+  const dd = document.getElementById('lead-target-person-id');
+  if (!dd) return;
+  // Ensure the option exists (the dropdown was filtered to org-affiliated people only)
+  if (!Array.from(dd.options).some(o => +o.value === +personId)) {
+    const person = (allData['people'] || []).find(p => +p.id === +personId);
+    if (person) {
+      const opt = document.createElement('option');
+      opt.value = person.id;
+      opt.textContent = [person.first_name, person.last_name].filter(Boolean).join(' ');
+      dd.appendChild(opt);
+    }
+  }
+  dd.value = personId;
+  dd.style.display = '';
+  // Clear free-text + match strip
+  const free = document.getElementById('lead-target-person-name');
+  if (free) free.value = '';
+  const matchEl = document.getElementById('lead-target-person-matches');
+  if (matchEl) matchEl.innerHTML = '';
+  const hint = document.getElementById('lead-target-person-hint');
+  if (hint) hint.style.display = 'none';
 }
 
 // Thin wrapper around the existing modal-root pattern.
