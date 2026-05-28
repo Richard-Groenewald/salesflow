@@ -248,7 +248,7 @@ tr:hover td{background:#F8FAFC;}
     <div id="login-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;" onclick="doLogin()">Sign In</button>
     <div style="margin-top:16px;font-size:11px;color:var(--text3);">Password disabled — test mode</div>
-    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.42</div>
+    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.43</div>
   </div>
 </div>
 
@@ -267,7 +267,7 @@ tr:hover td{background:#F8FAFC;}
       <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;" id="sidebar-user-role"></div>
       <div id="conn-status" class="conn-badge offline"><div class="conn-dot"></div> Offline</div>
       <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.42</div>
+        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.43</div>
         <button class="btn btn-sm" onclick="doLogout()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);border:none;font-size:11px;">Sign out</button>
       </div>
     </div>
@@ -5350,34 +5350,159 @@ function _personAffiliationsLabel(personId) {
   return 'affiliated with ' + names.join(', ');
 }
 
-function _personMatchScore(person, query) {
-  const q = (query || '').trim().toLowerCase();
-  if (!q) return 0;
-  const full = [person.first_name, person.last_name].filter(Boolean).join(' ').toLowerCase();
-  if (!full) return 0;
-  if (full === q) return 100;
-  // Token-overlap fallback — count distinct query tokens (≥3 chars) appearing in the name
-  const qTokens = Array.from(new Set(q.split(/\s+/).filter(t => t.length >= 3)));
-  if (!qTokens.length) {
-    // For short queries (e.g. single-letter initial) fall back to substring match
-    return full.includes(q) ? 5 : 0;
+// ── Similarity engine ───────────────────────────────────
+// Jaro-Winkler distance + simplified Metaphone phonetic encoding, combined
+// into a single 0-100 score. Used by both the org and person matchers so they
+// share consistent thresholds.
+
+function _jaroWinkler(s1, s2) {
+  if (s1 === s2) return s1 ? 1 : 0;
+  const len1 = s1.length, len2 = s2.length;
+  if (!len1 || !len2) return 0;
+  const matchDistance = Math.max(0, Math.floor(Math.max(len1, len2) / 2) - 1);
+  const s1Matches = new Array(len1).fill(false);
+  const s2Matches = new Array(len2).fill(false);
+  let matches = 0;
+  for (let i = 0; i < len1; i++) {
+    const start = Math.max(0, i - matchDistance);
+    const end   = Math.min(i + matchDistance + 1, len2);
+    for (let j = start; j < end; j++) {
+      if (s2Matches[j] || s1[i] !== s2[j]) continue;
+      s1Matches[i] = true; s2Matches[j] = true; matches++; break;
+    }
   }
-  const nameTokens = full.split(/\s+/).filter(Boolean);
-  let hits = 0;
-  for (const t of qTokens) {
-    if (nameTokens.some(n => n.includes(t) || t.includes(n))) hits++;
+  if (matches === 0) return 0;
+  let transpositions = 0, k = 0;
+  for (let i = 0; i < len1; i++) {
+    if (!s1Matches[i]) continue;
+    while (!s2Matches[k]) k++;
+    if (s1[i] !== s2[k]) transpositions++;
+    k++;
   }
-  return hits;
+  const jaro = (matches / len1 + matches / len2 + (matches - transpositions / 2) / matches) / 3;
+  // Winkler prefix bonus (up to 4 matching chars at the start)
+  let prefix = 0;
+  for (let i = 0; i < Math.min(4, len1, len2); i++) {
+    if (s1[i] === s2[i]) prefix++; else break;
+  }
+  return jaro + prefix * 0.1 * (1 - jaro);
 }
 
+// Simplified Metaphone — encodes English-ish words to a phonetic code so
+// "Smith" / "Smyth", "Phil" / "Fil" map to similar codes. Calibrated for
+// English; weaker for non-English names, where direct Jaro-Winkler does the
+// heavy lifting anyway. Returns uppercase phonetic string.
+function _metaphone(str) {
+  if (!str) return '';
+  let s = String(str).toUpperCase().replace(/[^A-Z]/g, '');
+  if (!s) return '';
+  if (/^(AE|GN|KN|PN|WR)/.test(s)) s = s.substr(1);
+  if (s.charAt(0) === 'X') s = 'S' + s.substr(1);
+  if (/^WH/.test(s)) s = 'W' + s.substr(2);
+  let result = '', prev = '';
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charAt(i);
+    const next = s.charAt(i + 1);
+    const nextnext = s.charAt(i + 2);
+    if (c === prev && c !== 'C') continue;
+    switch (c) {
+      case 'A': case 'E': case 'I': case 'O': case 'U':
+        if (i === 0) result += c; break;
+      case 'B':
+        if (!(i === s.length - 1 && prev === 'M')) result += 'B'; break;
+      case 'C':
+        if (next === 'I' && nextnext === 'A') result += 'X';
+        else if (next === 'H') { result += 'X'; i++; }
+        else if (next === 'I' || next === 'E' || next === 'Y') result += 'S';
+        else result += 'K';
+        break;
+      case 'D':
+        if (next === 'G' && (nextnext === 'E' || nextnext === 'I' || nextnext === 'Y')) { result += 'J'; i += 2; }
+        else result += 'T';
+        break;
+      case 'F': result += 'F'; break;
+      case 'G':
+        if (next === 'H') { if (i === 0 || /[AEIOU]/.test(prev)) result += 'F'; i++; }
+        else if (next === 'N') { /* silent */ }
+        else if (next === 'I' || next === 'E' || next === 'Y') result += 'J';
+        else result += 'K';
+        break;
+      case 'H':
+        if (i > 0 && /[BCDGHKLMNPRSTW]/.test(prev)) { /* silent */ }
+        else if (!/[AEIOU]/.test(next)) { /* silent */ }
+        else result += 'H';
+        break;
+      case 'J': result += 'J'; break;
+      case 'K': if (prev !== 'C') result += 'K'; break;
+      case 'L': result += 'L'; break;
+      case 'M': result += 'M'; break;
+      case 'N': result += 'N'; break;
+      case 'P':
+        if (next === 'H') { result += 'F'; i++; }
+        else result += 'P';
+        break;
+      case 'Q': result += 'K'; break;
+      case 'R': result += 'R'; break;
+      case 'S':
+        if (next === 'I' && (nextnext === 'O' || nextnext === 'A')) result += 'X';
+        else if (next === 'H') { result += 'X'; i++; }
+        else result += 'S';
+        break;
+      case 'T':
+        if (next === 'I' && (nextnext === 'O' || nextnext === 'A')) result += 'X';
+        else if (next === 'H') { result += '0'; i++; }
+        else result += 'T';
+        break;
+      case 'V': result += 'F'; break;
+      case 'W': if (/[AEIOU]/.test(next)) result += 'W'; break;
+      case 'X': result += 'KS'; break;
+      case 'Y': if (/[AEIOU]/.test(next)) result += 'Y'; break;
+      case 'Z': result += 'S'; break;
+    }
+    prev = c;
+  }
+  return result;
+}
+
+// Combined similarity score 0-100. Inputs should already be lowercased (and
+// suffix-stripped for orgs). Takes the max of direct Jaro-Winkler and a
+// phonetic-encoded Jaro-Winkler (slightly discounted), so a near-exact letter
+// match always wins over a phonetic-only match.
+function _stringSimilarity(a, b) {
+  if (!a || !b) return 0;
+  if (a === b) return 100;
+  const direct   = _jaroWinkler(a, b);
+  const phonetic = _jaroWinkler(_metaphone(a), _metaphone(b));
+  return Math.round(Math.max(direct, phonetic * 0.92) * 100);
+}
+
+// Person scoring: query is matched against full name AND each name part, so
+// "Mthembu" alone scores well against a person whose surname is Mthembu.
+function _personMatchScore(person, query) {
+  const q = (query || '').trim().toLowerCase();
+  const first = (person.first_name || '').toLowerCase();
+  const last  = (person.last_name  || '').toLowerCase();
+  const full  = [first, last].filter(Boolean).join(' ');
+  if (!q || !full) return 0;
+  return Math.max(
+    _stringSimilarity(q, full),
+    _stringSimilarity(q, first),
+    _stringSimilarity(q, last),
+  );
+}
+
+// Find matches: ≥ 90 highlighted as "exact"; 70–89 listed as possible. Below
+// 70 is dropped. Thresholds derived from Jaro-Winkler norms — typical close
+// matches land 0.92+ ("Mthembu" vs "Mtembu" ≈ 0.96), while unrelated short
+// strings cluster well under 0.70.
 function _findPersonMatches(query) {
   const people = allData['people'] || [];
   const scored = people
     .map(p => ({ person: p, score: _personMatchScore(p, query) }))
-    .filter(x => x.score > 0)
+    .filter(x => x.score >= 70)
     .sort((a, b) => b.score - a.score);
-  const exact = scored.find(x => x.score === 100) || null;
-  const shortlist = scored.filter(x => x.score < 100).slice(0, 5).map(x => x.person);
+  const exact = scored.find(x => x.score >= 90) || null;
+  const shortlist = scored.filter(x => x !== exact).slice(0, 5).map(x => x.person);
   return { exact: exact ? exact.person : null, shortlist };
 }
 
@@ -5736,20 +5861,22 @@ function _normaliseOrgName(name) {
   return s.replace(/[.,'"&]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+// Org scoring: each provided query name (colloquial + legal, if both given) is
+// compared against each of the candidate org's names. Returns the best score.
+// Suffix-stripping happens up front via _normaliseOrgName so "Acme (Pty) Ltd"
+// matches "Acme" cleanly.
 function _orgMatchScore(org, colloquial, legal) {
-  // Returns: 100 = exact match on either name after suffix-stripping; 0..N =
-  // token overlap score for the shortlist. Falsy candidates filtered by caller.
   const lc = _normaliseOrgName(colloquial);
   const ll = _normaliseOrgName(legal);
   const on = _normaliseOrgName(org.name);
   const oL = _normaliseOrgName(org.legal_name);
-  if ((lc && (on === lc || oL === lc)) || (ll && (on === ll || oL === ll))) return 100;
-  const tokens = new Set([lc, ll].join(' ').split(/\s+/).filter(t => t && t.length >= 3));
-  if (!tokens.size) return 0;
-  const haystack = (on + ' ' + oL).split(/\s+/).filter(Boolean);
-  let hits = 0;
-  for (const t of tokens) if (haystack.some(h => h.includes(t) || t.includes(h))) hits++;
-  return hits;
+  const candidates = [
+    lc && on ? _stringSimilarity(lc, on) : 0,
+    lc && oL ? _stringSimilarity(lc, oL) : 0,
+    ll && on ? _stringSimilarity(ll, on) : 0,
+    ll && oL ? _stringSimilarity(ll, oL) : 0,
+  ];
+  return Math.max(...candidates);
 }
 
 function _findOrgMatches(colloquial, legal) {
@@ -5757,10 +5884,10 @@ function _findOrgMatches(colloquial, legal) {
   const orgs = (allData['organisations'] || []).filter(o => !o.home_organisation);
   const scored = orgs
     .map(o => ({ org: o, score: _orgMatchScore(o, colloquial, legal) }))
-    .filter(x => x.score > 0)
+    .filter(x => x.score >= 70)
     .sort((a, b) => b.score - a.score);
-  const exact = scored.find(x => x.score === 100) || null;
-  const shortlist = scored.filter(x => x.score < 100).slice(0, 5).map(x => x.org);
+  const exact = scored.find(x => x.score >= 90) || null;
+  const shortlist = scored.filter(x => x !== exact).slice(0, 5).map(x => x.org);
   return { exact: exact ? exact.org : null, shortlist };
 }
 
