@@ -248,7 +248,7 @@ tr:hover td{background:#F8FAFC;}
     <div id="login-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;" onclick="doLogin()">Sign In</button>
     <div style="margin-top:16px;font-size:11px;color:var(--text3);">Password disabled — test mode</div>
-    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.44</div>
+    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.45</div>
   </div>
 </div>
 
@@ -267,7 +267,7 @@ tr:hover td{background:#F8FAFC;}
       <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;" id="sidebar-user-role"></div>
       <div id="conn-status" class="conn-badge offline"><div class="conn-dot"></div> Offline</div>
       <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.44</div>
+        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.45</div>
         <button class="btn btn-sm" onclick="doLogout()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);border:none;font-size:11px;">Sign out</button>
       </div>
     </div>
@@ -615,7 +615,7 @@ tr:hover td{background:#F8FAFC;}
             </div>
             <input type="text" id="lead-target-org-name" class="form-control" placeholder="New organisation name" style="margin-top:8px;" oninput="onLeadTargetOrgNameInput()">
             <div id="lead-target-org-matches" style="margin-top:8px;"></div>
-            <div style="font-size:11px;color:var(--text3);margin-top:4px;">We'll warn you if it seems a similar organisation exists in our database.</div>
+            <div id="lead-target-org-hint" style="font-size:11px;color:var(--text3);margin-top:4px;">We'll warn you if it seems a similar organisation exists in our database.</div>
           </div>
 
           <div class="form-group">
@@ -5165,17 +5165,21 @@ function onLeadSourceChange() {
 
 function onLeadTargetOrgChange() {
   // Picking an existing org from the dropdown locks in that choice — the
-  // free-text "create new" input + its similarity match strip become irrelevant
-  // and are hidden. Clearing the dropdown brings them back.
+  // free-text "create new" input, its similarity match strip, and the
+  // "we'll warn you" hint all become irrelevant and are hidden. Clearing
+  // the dropdown brings them back.
   const orgId    = document.getElementById('lead-target-org-id').value;
   const nameField = document.getElementById('lead-target-org-name');
   const matchEl   = document.getElementById('lead-target-org-matches');
+  const hintEl    = document.getElementById('lead-target-org-hint');
   if (orgId) {
     if (nameField) { nameField.value = ''; nameField.style.display = 'none'; }
     if (matchEl)   { matchEl.innerHTML = ''; matchEl.style.display = 'none'; }
+    if (hintEl)    hintEl.style.display = 'none';
   } else {
     if (nameField) nameField.style.display = '';
     if (matchEl)   matchEl.style.display = '';
+    if (hintEl)    hintEl.style.display = '';
   }
   // Refresh the contact-person dropdown to match the chosen org's affiliations.
   refreshLeadTargetPersonDropdown();
@@ -5303,6 +5307,14 @@ function onLeadTargetOrgNameInput() {
         <div style="font-size:12px;">${o.name}${o.legal_name && o.legal_name !== o.name ? ` <span style="color:var(--text3);">(${o.legal_name})</span>` : ''}</div>
         <button type="button" class="btn btn-secondary btn-sm" onclick="useLeadTargetOrgMatch(${o.id})">Use</button>
       </div>`).join('');
+  }
+  // No matches at all → reassure the user this looks like a genuine new client.
+  if (!exact && !shortlist.length) {
+    html = `
+      <div style="padding:8px 10px;border:1px dashed var(--border);border-radius:var(--radius);background:#F8FAFC;display:flex;align-items:center;gap:8px;">
+        <span style="font-size:14px;">✨</span>
+        <div style="font-size:12px;color:var(--text2);">Looks like a new organisation — not in our existing list.</div>
+      </div>`;
   }
   matchEl.innerHTML = html;
 }
