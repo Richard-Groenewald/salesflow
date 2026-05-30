@@ -248,7 +248,7 @@ tr:hover td{background:#F8FAFC;}
     <div id="login-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;" onclick="doLogin()">Sign In</button>
     <div style="margin-top:16px;font-size:11px;color:var(--text3);">Password disabled — test mode</div>
-    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.46</div>
+    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.47</div>
   </div>
 </div>
 
@@ -267,7 +267,7 @@ tr:hover td{background:#F8FAFC;}
       <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;" id="sidebar-user-role"></div>
       <div id="conn-status" class="conn-badge offline"><div class="conn-dot"></div> Offline</div>
       <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.46</div>
+        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.47</div>
         <button class="btn btn-sm" onclick="doLogout()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);border:none;font-size:11px;">Sign out</button>
       </div>
     </div>
@@ -1314,6 +1314,9 @@ const PAGES = {
       { key: 'person_id', label: 'Person (eligible only)', type: 'lookup', lookupTable: 'eligible_people', lookupLabel: r => [r.first_name, r.last_name].filter(Boolean).join(' '), required: true },
       { key: 'username',  label: 'Username', required: true },
       { key: 'password',  label: 'Password', type: 'password', required: true },
+      // Login role: not a column on system_users — written to user_roles separately
+      // (see saveRecord / syncSystemUserRole). skipPersist keeps it out of the row body.
+      { key: 'login_role', label: 'Login Role', type: 'lookup', lookupTable: 'roles', lookupLabel: r => r.name, skipPersist: true },
       { key: 'active',    label: 'Active', type: 'checkbox' },
     ],
   },
@@ -1759,6 +1762,11 @@ async function renderModal(data) {
   const isEdit = !!data;
   const title = isEdit ? `Edit ${cfg.title.slice(0,-1)}` : `Add ${cfg.title.slice(0,-1)}`;
 
+  // System Users' Login Role picker reads from the roles lookup — ensure it's loaded.
+  if (currentPage === 'system_users' && !allData['roles']) {
+    try { allData['roles'] = await apiGet('roles', 'select=*&order=name.asc'); } catch(e) {}
+  }
+
   const fields = cfg.fields.map(f => {
     const val = data ? (data[f.key] ?? '') : (f.type === 'checkbox' ? false : '');
     return renderField(f, val);
@@ -1784,6 +1792,14 @@ async function renderModal(data) {
     </div>`;
 
   document.getElementById('modal-root').innerHTML = html;
+
+  // For system_users on edit, preselect the user's current login role (from user_roles).
+  if (currentPage === 'system_users' && data?.id) {
+    apiGet('user_roles', 'user_id=eq.' + data.id + '&select=role_id').then(rows => {
+      const el = document.getElementById('f_login_role');
+      if (el && rows[0]) el.value = rows[0].role_id;
+    }).catch(() => {});
+  }
 
   // For parties, populate ref_id based on party_type
   if (currentPage === 'parties') {
@@ -1852,11 +1868,16 @@ async function saveRecord(e) {
   for (const f of cfg.fields) {
     const el = document.getElementById('f_' + f.key);
     if (!el) continue;
+    if (f.skipPersist) continue; // handled separately (e.g. login_role -> user_roles)
+    // Password is only required on create; on edit, a blank password means "leave unchanged".
+    if (editingId && f.key === 'password' && !el.value) continue;
+
     if (f.type === 'checkbox') body[f.key] = el.checked;
     else if (f.type === 'number' || f.type === 'lookup') body[f.key] = el.value ? +el.value : null;
     else body[f.key] = el.value || null;
 
-    if (f.required && !body[f.key] && body[f.key] !== false) {
+    const requiredHere = f.required && !(editingId && f.key === 'password');
+    if (requiredHere && !body[f.key] && body[f.key] !== false) {
       showStatus(`${f.label} is required`, 'error');
       el.focus();
       return;
@@ -1888,18 +1909,39 @@ async function saveRecord(e) {
   }
 
   try {
+    let saved;
     if (editingId) {
-      await apiPatch(cfg.table, editingId, body);
+      saved = await apiPatch(cfg.table, editingId, body);
       showStatus('Record updated');
     } else {
-      await apiPost(cfg.table, body);
+      saved = await apiPost(cfg.table, body);
       showStatus('Record created');
+    }
+    // System Users: persist the chosen Login Role into user_roles (separate table).
+    if (currentPage === 'system_users') {
+      const roleEl = document.getElementById('f_login_role');
+      const roleId = roleEl && roleEl.value ? +roleEl.value : null;
+      const userId = editingId || (Array.isArray(saved) ? saved[0]?.id : saved?.id);
+      if (userId) await syncSystemUserRole(userId, roleId);
     }
     closeModal();
     allData[cfg.table] = null; // clear cache
     await loadTable(currentPage);
   } catch(e) {
     showStatus('Save failed: ' + e.message, 'error');
+  }
+}
+
+// Replace a system user's login role in user_roles with the selected one.
+// Single-role model for login. A null roleId leaves existing roles untouched
+// (avoids accidentally stripping a user's access by saving with no role picked).
+async function syncSystemUserRole(userId, roleId) {
+  if (!roleId) return;
+  try {
+    await api('user_roles', 'DELETE', null, 'user_id=eq.' + userId);
+    await api('user_roles', 'POST', { user_id: userId, role_id: roleId }, '');
+  } catch(e) {
+    console.warn('Could not sync user login role:', e.message);
   }
 }
 
