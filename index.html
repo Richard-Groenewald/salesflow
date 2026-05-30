@@ -248,7 +248,7 @@ tr:hover td{background:#F8FAFC;}
     <div id="login-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;" onclick="doLogin()">Sign In</button>
     <div style="margin-top:16px;font-size:11px;color:var(--text3);">Password disabled — test mode</div>
-    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.47</div>
+    <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--red);">FOCUS v7.6.48</div>
   </div>
 </div>
 
@@ -267,7 +267,7 @@ tr:hover td{background:#F8FAFC;}
       <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;" id="sidebar-user-role"></div>
       <div id="conn-status" class="conn-badge offline"><div class="conn-dot"></div> Offline</div>
       <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.47</div>
+        <div style="background:var(--red);color:white;font-size:12px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.05em;">FOCUS v7.6.48</div>
         <button class="btn btn-sm" onclick="doLogout()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);border:none;font-size:11px;">Sign out</button>
       </div>
     </div>
@@ -281,6 +281,7 @@ tr:hover td{background:#F8FAFC;}
         <div class="topbar-sub" id="page-sub"></div>
       </div>
       <div class="topbar-actions">
+        <div id="view-filter-bar" style="display:flex;gap:6px;align-items:center;"></div>
         <button class="btn btn-primary" id="add-btn" onclick="openAddModal()">+ Add</button>
       </div>
     </div>
@@ -591,7 +592,7 @@ tr:hover td{background:#F8FAFC;}
           <!-- Conditional: Client Expansion → org picker -->
           <div class="form-group" id="lead-source-org-wrap" style="display:none;">
             <label class="form-label">Expanding from client</label>
-            <select id="lead-source-org-id" class="form-control">
+            <select id="lead-source-org-id" class="form-control" onchange="onLeadSourceOrgChange()">
               <option value="">— select client —</option>
             </select>
           </div>
@@ -1613,6 +1614,9 @@ function showPage(page) {
   // Show/hide and wire add button
   const addBtn = document.getElementById('add-btn');
   addBtn.style.display = (cfg.readOnly) ? 'none' : '';
+  // Clear the ownership view-filter bar; only the leads/opportunities renderers repopulate it.
+  const viewBar = document.getElementById('view-filter-bar');
+  if (viewBar) viewBar.innerHTML = '';
   if (page === 'opportunities') {
     addBtn.onclick = () => openNewOpportunity();
     addBtn.textContent = '+ New Opportunity';
@@ -2435,7 +2439,7 @@ async function initOppForm() {
 
   // Populate combined service dropdown grouped by major category
   const subSel = document.getElementById('opp-service-sub-id');
-  const allSubs = await apiGet('service_sub', 'active=eq.true&select=*&order=name.asc');
+  const allSubs = allData['service_sub_all'] || await apiGet('service_sub', 'active=eq.true&select=*&order=name.asc');
   allData['service_sub_all'] = allSubs;
   subSel.innerHTML = '<option value="">— select service type —</option>';
   majorCats.forEach(m => {
@@ -4536,7 +4540,9 @@ async function doLogin() {
     document.getElementById('sidebar-user-name').textContent = currentUser.name;
     document.getElementById('sidebar-user-role').textContent = roles.map(r => r.name).join(', ') || 'No role';
 
-    await checkConnection();
+    // Login already made several successful calls — we're demonstrably online.
+    // Skip the extra checkConnection() ping (one fewer function invocation).
+    setOnline(true);
     await loadAppSettings();
     buildNav();
   } catch(e) {
@@ -4611,15 +4617,77 @@ function doLogout() {
 }
 
 
+// ── Ownership view filter (Own / All / Collaborations / Team) ──────────────
+// Layered on top of the existing status tabs / sortable table. Default 'own'.
+// Persists within the session so switching pages keeps the chosen view.
+let leadsOwnerView = 'own'; // 'own' | 'all' | 'team'
+let oppsOwnerView  = 'own'; // 'own' | 'all' | 'collab' | 'team'
+
+// Team view is region-based and shown only to managers (literal edit_all_records
+// holders — admins carry 'all', not this string, so the button stays manager-only).
+function isManagerViewer() {
+  return !!currentUser && !currentUser.isAdmin
+    && (currentUser.permissions || []).includes('edit_all_records');
+}
+
+// Render the Own/All/Collaborations/Team buttons next to the page's New button.
+function renderViewFilterBar(kind) {
+  const bar = document.getElementById('view-filter-bar');
+  if (!bar) return;
+  const current = kind === 'leads' ? leadsOwnerView : oppsOwnerView;
+  const btns = [{ key: 'own', label: 'Show Own' }, { key: 'all', label: 'Show All' }];
+  if (kind === 'opps') btns.push({ key: 'collab', label: 'Collaborations' });
+  if (isManagerViewer()) btns.push({ key: 'team', label: 'Team' });
+  bar.innerHTML = btns.map(b =>
+    `<button class="btn btn-sm ${b.key === current ? 'btn-primary' : 'btn-secondary'}"
+       onclick="setOwnerView('${kind}','${b.key}')">${b.label}</button>`).join('');
+}
+
+function setOwnerView(kind, view) {
+  if (kind === 'leads') { leadsOwnerView = view; renderLeadsPage(); }
+  else { oppsOwnerView = view; renderOpportunitiesPage(); }
+}
+
+// Leads: own / all / team (no collaborator concept on leads). Synchronous.
+function filterLeadsByView(leads, view) {
+  const pid = currentUser?.personId;
+  if (view === 'all') return leads;
+  if (view === 'team' && isManagerViewer()) {
+    const regions = (currentUser?.regions || []).map(Number);
+    return leads.filter(l => l.region_id != null && regions.includes(+l.region_id));
+  }
+  return leads.filter(l => l.owner_id != null && +l.owner_id === +pid); // 'own' (+ fallback)
+}
+
+// Deals: own / all / collab (own + collaborated) / team. Async — collab needs a fetch.
+async function filterDealsByView(deals, view) {
+  const pid = currentUser?.personId;
+  if (view === 'all') return deals;
+  if (view === 'team' && isManagerViewer()) {
+    const regions = (currentUser?.regions || []).map(Number);
+    return deals.filter(d => d.region_id != null && regions.includes(+d.region_id));
+  }
+  if (view === 'collab') {
+    let ids = new Set();
+    try {
+      const rows = await apiGet('deal_collaborators', 'person_id=eq.' + pid + '&select=deal_id');
+      ids = new Set(rows.map(r => +r.deal_id));
+    } catch(e) { console.warn('Could not load collaborations:', e.message); }
+    return deals.filter(d => (d.owner_id != null && +d.owner_id === +pid) || ids.has(+d.id));
+  }
+  return deals.filter(d => d.owner_id != null && +d.owner_id === +pid); // 'own' (+ fallback)
+}
+
 async function renderOpportunitiesPage() {
   const head = document.getElementById('table-head');
   const body = document.getElementById('table-body');
 
   head.innerHTML = '';
   body.innerHTML = '<tr class="empty-row"><td colspan="6">Loading...</td></tr>';
+  renderViewFilterBar('opps');
 
   try {
-    const [deals, orgs, stages, people] = await Promise.all([
+    let [deals, orgs, stages, people] = await Promise.all([
       apiGet('deals', 'select=*&order=created_at.desc'),
       allData['organisations'] || apiGet('organisations', 'select=*'),
       allData['stages'] || apiGet('stages', 'select=*'),
@@ -4628,6 +4696,9 @@ async function renderOpportunitiesPage() {
     allData['organisations'] = orgs;
     allData['stages'] = stages;
     allData['people'] = people;
+
+    // Apply the ownership view (own / all / collab / team) before rendering.
+    deals = await filterDealsByView(deals, oppsOwnerView);
 
     document.getElementById('page-sub').textContent = deals.length + ' deal' + (deals.length !== 1 ? 's' : '');
 
@@ -4710,9 +4781,11 @@ async function renderLeadsPage() {
     </div>
   </td></tr>`;
 
+  renderViewFilterBar('leads');
+
   try {
     // Load lookups + leads in parallel
-    const [leads, sources, regions, services, people, orgs, campaigns] = await Promise.all([
+    let [leads, sources, regions, services, people, orgs, campaigns] = await Promise.all([
       apiGet('leads', 'select=*&order=created_at.desc'),
       allData['lead_sources'] || apiGet('lead_sources', 'select=*'),
       allData['regions']      || apiGet('regions', 'select=*'),
@@ -4728,7 +4801,10 @@ async function renderLeadsPage() {
     allData['organisations']      = orgs;
     allData['research_campaigns'] = campaigns;
 
-    // Tabs filter by status. Ownership is intentionally not used as a tab filter for now.
+    // Apply the ownership view (own / all / team) before the status tabs/counts.
+    leads = filterLeadsByView(leads, leadsOwnerView);
+
+    // Tabs filter by status. Ownership view is applied above.
     const tabs = [
       { key: 'New',       label: 'New',       filter: l => l.status === 'New' },
       { key: 'Working',   label: 'Working',   filter: l => l.status === 'Working' },
@@ -5507,6 +5583,30 @@ function onLeadSourceChange() {
   else if (name === 'Client Expansion') orgWrap.style.display = '';
   else if (name === 'Research') campaignWrap.style.display = '';
   else if (name) detailWrap.style.display = ''; // Inbound, Outbound, Tender, Other
+}
+
+// Client Expansion: when the user picks the "Expanding from client", default the
+// Target organisation to that same client — but ONLY if the target is still empty
+// (don't overwrite an org they already picked or a new-org name they've started
+// typing). Target stays fully editable afterwards. No-op for other sources.
+function onLeadSourceOrgChange() {
+  const sourceId = document.getElementById('lead-source-id').value;
+  const source = (allData['lead_sources'] || []).find(s => +s.id === +sourceId);
+  if (source?.name !== 'Client Expansion') return;
+
+  const clientId = document.getElementById('lead-source-org-id').value;
+  if (!clientId) return;
+
+  const targetSel  = document.getElementById('lead-target-org-id');
+  const targetName = document.getElementById('lead-target-org-name');
+  const targetAlreadySet = (targetSel && targetSel.value)
+    || (targetName && targetName.value.trim());
+  if (targetAlreadySet) return; // only fill when target is empty
+
+  if (targetSel) {
+    targetSel.value = clientId;
+    onLeadTargetOrgChange(); // cascade: hide new-org input, refresh contact list
+  }
 }
 
 function onLeadTargetOrgChange() {
